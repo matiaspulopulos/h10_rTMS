@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="MMP">
+<meta name="description" content="Start, stop and download Polar H10 internal RR recordings for up to four sensors.">
+<title>H10 RR Recorder</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --text: #1c2230; --muted: #5b6475; --line: #d9dde5;
+    --accent: #1f5fbf; --ok: #17733a; --ok-bg: #e5f3ea; --warn: #8a5a00; --warn-bg: #fff3d9;
+    --err: #b3261e; --err-bg: #fce9e7; --rec: #c62828; --rec-bg: #fdecec; --info-bg: #edf1f7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  header { position: sticky; top: 0; z-index: 10; background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  header .sub { font-size: 13px; color: var(--muted); }
+  .clockbox { text-align: right; }
+  #clock { font-variant-numeric: tabular-nums; font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+  #clockDate { font-size: 13px; color: var(--muted); }
+  main { padding: 16px; max-width: 1180px; margin: 0 auto; }
+  .banner { border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 15px; }
+  .banner.err { background: var(--err-bg); color: var(--err); }
+  .banner.warn { background: var(--warn-bg); color: var(--warn); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  @media (min-width: 740px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .card.recording { border-color: var(--rec); box-shadow: 0 0 0 2px rgba(198, 40, 40, .14); }
+  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .slot-name { font-size: 24px; font-weight: 800; letter-spacing: .3px; }
+  .conn { font-size: 14px; color: var(--muted); }
+  .conn.on { color: var(--ok); font-weight: 700; }
+  .meta { font-size: 14px; color: var(--muted); min-height: 1em; }
+  .meta b { color: var(--text); font-weight: 600; }
+  .pid { display: flex; align-items: center; gap: 10px; font-size: 15px; flex-wrap: wrap; }
+  .pid input { font-size: 19px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; width: 9em;
+    text-transform: uppercase; font-weight: 600; }
+  .pid input:disabled { background: #f1f2f4; color: var(--muted); }
+  .pid input::placeholder { text-transform: none; font-weight: 400; }
+  .status { font-size: 17px; font-weight: 700; padding: 9px 12px; border-radius: 9px; background: var(--info-bg); }
+  .status.rec { background: var(--rec-bg); color: var(--rec); }
+  .status.ready { background: var(--ok-bg); color: var(--ok); }
+  .status.mem { background: var(--warn-bg); color: var(--warn); }
+  .status small { display: block; font-weight: 500; font-size: 14px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font: inherit; font-size: 16px; min-height: 46px; padding: 8px 16px; border-radius: 10px;
+    border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+  button.stop { background: var(--rec); border-color: var(--rec); color: #fff; font-weight: 700; }
+  button.danger { color: var(--err); border-color: #e3b4b0; }
+  button.link { border: none; background: none; min-height: 0; padding: 0; color: var(--accent);
+    text-decoration: underline; font-size: 14px; }
+  button:disabled { opacity: .45; cursor: default; }
+  .msg { font-size: 15px; padding: 8px 12px; border-radius: 9px; background: var(--info-bg); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .summary { font-size: 14px; border-top: 1px dashed var(--line); padding-top: 8px; color: var(--muted); }
+  .summary b { color: var(--text); }
+  .qc-ok { color: var(--ok); font-weight: 700; }
+  .qc-check { color: var(--warn); font-weight: 700; }
+  section.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-top: 18px; }
+  section.panel h2 { font-size: 18px; margin: 0 0 10px; }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  td .actions { flex-wrap: nowrap; }
+  td .actions button { min-height: 38px; padding: 4px 12px; font-size: 14px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-top: 14px; }
+  details summary { font-weight: 700; cursor: pointer; font-size: 17px; }
+  details ol, details ul { padding-left: 22px; }
+  details li { margin: 5px 0; }
+  .mail { font-size: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mail code { font-size: 15px; background: var(--info-bg); padding: 3px 8px; border-radius: 6px; }
+  pre#log { max-height: 320px; overflow: auto; font-size: 12px; background: #11151c; color: #d7dce5; padding: 10px;
+    border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+  .filelinks a { display: inline-block; margin: 4px 10px 4px 0; }
+  .modal { position: fixed; inset: 0; background: rgba(15, 20, 30, .45); display: flex; align-items: center;
+    justify-content: center; padding: 16px; z-index: 50; }
+  .modal[hidden] { display: none; }
+  .modal-box { background: var(--card); border-radius: 14px; padding: 18px; max-width: 460px; width: 100%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .25); }
+  .modal-box h3 { margin: 0 0 8px; font-size: 19px; }
+  .modal-box p { margin: 0 0 16px; white-space: pre-line; }
+  .modal-box .actions { justify-content: flex-end; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>H10 RR Recorder</h1>
+    <div class="sub">Polar H10 internal RR recordings · 4 sensors</div>
+  </div>
+  <div class="clockbox">
+    <div id="clock">--:--:--</div>
+    <div id="clockDate"></div>
+  </div>
+</header>
+
+<main>
+  <div id="banners"></div>
+  <div class="grid" id="slots"></div>
+
+  <section class="panel">
+    <h2>Recordings saved on this iPad</h2>
+    <div class="mail">Data go to <code id="mailto"></code>
+      <button class="link" data-action="copy-address">Copy address</button>
+      <button id="sendAllBtn" data-action="email-unsent">Email all not yet sent</button>
+    </div>
+    <div class="tablewrap" id="sessions" style="margin-top:10px"></div>
+    <div id="fallback" class="msg warn" hidden style="margin-top:10px"></div>
+  </section>
+
+  <details id="help">
+    <summary>How to use</summary>
+    <h4>Once, before the first session</h4>
+    <ol>
+      <li>Open this page in the free app <b>Bluefy – Web BLE Browser</b> (Safari cannot use Bluetooth). Bookmark it.</li>
+      <li>Label the four sensors H10-01 to H10-04. The first time you tap <b>Connect</b> on a card, pick the sensor whose ID (printed on the sensor) matches that label. The card remembers it.</li>
+      <li>Recommended: update each sensor to the latest Polar firmware (4.2.0 or later) with the Polar Flow app.</li>
+      <li>Use the <b>same iPad</b> to start and to download a given sensor. Newer Polar firmware only lets the device that started a recording read it.</li>
+    </ol>
+    <h4>Start (per participant)</h4>
+    <ol>
+      <li>Wet the electrodes, put the strap on the participant and clip the sensor on. The sensor only switches on when it touches skin.</li>
+      <li>On the participant's card tap <b>Connect</b>. Check that a heart rate appears and “skin contact ✓”.</li>
+      <li>Type the participant ID and tap <b>Start recording</b>. The iPad disconnects; the sensor keeps recording on its own, also far from the iPad.</li>
+      <li>Use the clock at the top of this page for the timing sheet.</li>
+    </ol>
+    <h4>End (while the participant still wears the strap)</h4>
+    <ol>
+      <li>Tap <b>Connect</b> → <b>Stop &amp; download</b>. Wait until “Downloaded” appears.</li>
+      <li>Tap <b>Email data</b> → choose Mail → send to the address shown above.</li>
+      <li>Tap <b>Clear sensor memory</b>. Then remove the strap. The card is ready for the next participant.</li>
+    </ol>
+    <h4>Important</h4>
+    <ul>
+      <li>Do <b>not</b> unclip the sensor from the strap during a session: that stops the recording.</li>
+      <li>A copy of every download stays in the list above until you delete it, so you can email it again.</li>
+      <li>If a Bluetooth pairing request appears, tap <b>Pair</b>.</li>
+      <li>If Connect fails: make sure the strap is worn, close other apps that use the sensor (Polar Flow, Polar Beat, EphorPolar), and in iPad Settings → Bluetooth tap “Forget this device” for the Polar H10, then try again.</li>
+    </ul>
+    <h4>Pilot test (once)</h4>
+    <p>Record 15 minutes. Around minute 5, lift the strap off the skin for about one minute without unclipping the sensor. Stop, download and email the data. The info file shows whether the sensor reports the offline period.</p>
+  </details>
+
+  <details id="debug">
+    <summary>Technical log</summary>
+    <div class="actions" style="margin:10px 0">
+      <button data-action="copy-log">Copy log</button>
+      <button data-action="email-log">Email log</button>
+    </div>
+    <pre id="log"></pre>
+  </details>
+</main>
+
+<div class="modal" id="modal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h3 id="mTitle"></h3>
+    <p id="mText"></p>
+    <div class="actions">
+      <button id="mCancel">Cancel</button>
+      <button id="mOk" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------------------------------------------------------------- settings */
+const APP_VERSION = '1.0.0';
+const EMAIL_TO = 'matias.pulopulos@gmail.com';
+const SLOT_IDS = ['H10-01', 'H10-02', 'H10-03', 'H10-04'];
+const STORE_KEY = 'h10rr.v1';
+const FRAME_SIZE = 20;           // RFC76 air packet size for writes (valid for any ATT MTU)
+const IDLE_TIMEOUT_MS = 20000;   // abort a transfer if nothing arrives for this long
+const QC_LOW_S = -2, QC_HIGH_S = 3;
+
+const UUIDS = {
+  psftp: '0000feee-0000-1000-8000-00805f9b34fb',
+  mtu:   'fb005c51-02e7-f387-1cad-8acd2d8df0c8',
+  d2h:   'fb005c52-02e7-f387-1cad-8acd2d8df0c8',
+};
+const QUERY = { SET_SYSTEM_TIME: 1, SET_LOCAL_TIME: 3, START_RECORDING: 14, STOP_RECORDING: 15, RECORDING_STATUS: 16 };
+const CMD = { GET: 0, REMOVE: 3 };
+const SAMPLE_TYPE_RR = 16;
+const PFTP_ERRORS = {
+  1: 'REBOOTING', 2: 'TRY_AGAIN', 100: 'UNIDENTIFIED_HOST_ERROR', 101: 'INVALID_COMMAND',
+  102: 'INVALID_PARAMETER', 103: 'NO_SUCH_FILE_OR_DIRECTORY', 104: 'DIRECTORY_EXISTS', 105: 'FILE_EXISTS',
+  106: 'OPERATION_NOT_PERMITTED', 107: 'NO_SUCH_USER', 108: 'TIMEOUT', 200: 'UNIDENTIFIED_DEVICE_ERROR',
+  201: 'NOT_IMPLEMENTED', 202: 'SYSTEM_BUSY', 203: 'INVALID_CONTENT', 204: 'CHECKSUM_FAILURE', 205: 'DISK_FULL',
+  206: 'PREREQUISITE_NOT_MET', 207: 'INSUFFICIENT_BUFFER', 208: 'WAIT_FOR_IDLING', 209: 'LOW_BATTERY?',
+  303: 'PACKET_LOST',
+};
+
+/* ------------------------------------------------------------------ helpers */
+const $ = (sel, root = document) => root.querySelector(sel);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function fmtClock(ms) { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+function fmtDate(ms) { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+function fmtDateTime(ms, withMs) { const d = new Date(ms); return `${fmtDate(ms)} ${fmtClock(ms)}` + (withMs ? '.' + pad(d.getMilliseconds(), 3) : ''); }
+function fmtUtc(ms) { const d = new Date(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} UTC`; }
+function tzLabel(ms) { const off = -new Date(ms).getTimezoneOffset(); const a = Math.abs(off); return `UTC${off >= 0 ? '+' : '-'}${pad(Math.floor(a / 60))}:${pad(a % 60)}`; }
+function fmtDur(sec) {
+  sec = Math.max(0, Math.round(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  return h ? `${h} h ${pad(m)} min` : (m ? `${m} min ${pad(s)} s` : `${s} s`);
+}
+function fmtOffset(ms) { const t = Math.floor(ms / 1000); return `${pad(Math.floor(t / 3600))}:${pad(Math.floor(t % 3600 / 60))}:${pad(t % 60)}.${pad(Math.round(ms % 1000), 3)}`; }
+function idStamp(ms) { const d = new Date(ms); return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`; }
+function parseIdStamp(id) {
+  const m = /_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(id || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null;
+}
+function pidFromId(id) { const m = /^(.*)_\d{8}_\d{6}$/.exec(id || ''); return m ? m[1] : (id || ''); }
+function sanitizePid(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); }
+function sensorCode(name) { const m = /([0-9A-F]{8})\s*$/i.exec(name || ''); return m ? m[1].toUpperCase() : (name || '?'); }
+function b64encode(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function b64decode(b64) { const s = atob(b64); const u8 = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i); return u8; }
+function hex(u8, max = 48) { return Array.from(u8.subarray(0, max), b => pad(b.toString(16))).join(' ') + (u8.length > max ? ' …' : ''); }
+function cmpVersion(a, b) {
+  const pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number), pb = String(b).split(/[^0-9]+/).filter(Boolean).map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d; }
+  return 0;
+}
+function withTimeout(promise, ms, message) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(message)), ms); })]).finally(() => clearTimeout(t));
+}
+function errText(e) { return (e && (e.message || e.name)) || String(e); }
+
+/* ---------------------------------------------------------------------- log */
+const LOG = [];
+function log(...parts) {
+  const line = `${fmtDateTime(Date.now(), true)}  ${parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join(' ')}`;
+  LOG.push(line);
+  if (LOG.length > 3000) LOG.shift();
+  const el = $('#log');
+  if (el && $('#debug').open) el.textContent = LOG.slice(-500).join('\n');
+  if (window.console) console.log(line);
+}
+
+/* ------------------------------------------------------------------ storage */
+function loadState() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { /* storage unavailable */ }
+  s = (s && typeof s === 'object') ? s : {};
+  s.slots = s.slots || {};
+  for (const id of SLOT_IDS) s.slots[id] = Object.assign({ sensorName: null, pid: '', active: null }, s.slots[id] || {});
+  s.sessions = s.sessions || {};
+  return s;
+}
+let STATE = loadState();
+function saveState() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(STATE)); return true; }
+  catch (e) { log('Storage error:', errText(e)); return false; }
+}
+const S = id => STATE.slots[id];
+
+/* ----------------------------------------------------------------- protobuf */
+const PB = {
+  varint(n) {
+    const out = [];
+    if (n < 0) {
+      let v = BigInt.asUintN(64, BigInt(Math.trunc(n)));
+      while (v > 0x7fn) { out.push(Number(v & 0x7fn) | 0x80); v >>= 7n; }
+      out.push(Number(v));
+      return out;
+    }
+    n = Math.floor(n);
+    while (n > 0x7f) { out.push((n % 128) | 0x80); n = Math.floor(n / 128); }
+    out.push(n);
+    return out;
+  },
+  key(field, wire) { return PB.varint(field * 8 + wire); },
+  uint(field, n) { return [...PB.key(field, 0), ...PB.varint(n)]; },
+  int(field, n) { return [...PB.key(field, 0), ...PB.varint(n)]; },
+  bool(field, b) { return PB.uint(field, b ? 1 : 0); },
+  bytes(field, arr) { return [...PB.key(field, 2), ...PB.varint(arr.length), ...arr]; },
+  string(field, s) { return PB.bytes(field, Array.from(new TextEncoder().encode(s))); },
+  readVarint(buf, pos) {
+    let result = 0, mul = 1, b;
+    do {
+      if (pos >= buf.length) throw new Error('Corrupt data (truncated varint)');
+      b = buf[pos++];
+      result += (b & 0x7f) * mul;
+      mul *= 128;
+    } while (b & 0x80);
+    return [result, pos];
+  },
+  fields(buf) {
+    const out = [];
+    let pos = 0;
+    while (pos < buf.length) {
+      let key; [key, pos] = PB.readVarint(buf, pos);
+      const field = Math.floor(key / 8), wire = key % 8;
+      let value;
+      if (wire === 0) { [value, pos] = PB.readVarint(buf, pos); }
+      else if (wire === 2) {
+        let len; [len, pos] = PB.readVarint(buf, pos);
+        if (pos + len > buf.length) throw new Error('Corrupt data (truncated field ' + field + ')');
+        value = buf.subarray(pos, pos + len); pos += len;
+      }
+      else if (wire === 1) { value = buf.subarray(pos, pos + 8); pos += 8; }
+      else if (wire === 5) { value = buf.subarray(pos, pos + 4); pos += 4; }
+      else throw new Error('Corrupt data (wire type ' + wire + ')');
+      if (pos > buf.length) throw new Error('Corrupt data (overrun)');
+      out.push({ field, wire, value });
+    }
+    return out;
+  },
+  packed(buf) { const out = []; let pos = 0, v; while (pos < buf.length) { [v, pos] = PB.readVarint(buf, pos); out.push(v); } return out; },
+  text(u8) { return new TextDecoder().decode(u8); },
+};
+
+/* ----------------------------------------------------- Polar message formats */
+const Polar = {
+  startRecordingParams(sampleType, intervalS, id) {
+    return [...PB.uint(1, sampleType), ...PB.bytes(2, PB.uint(3, intervalS)), ...PB.string(3, id)];
+  },
+  operation(cmd, path) { return [...PB.uint(1, cmd), ...PB.string(2, path)]; },
+  date(y, m, d) { return [...PB.uint(1, y), ...PB.uint(2, m), ...PB.uint(3, d)]; },
+  time(h, mi, s, ms) { return [...PB.uint(1, h), ...PB.uint(2, mi), ...PB.uint(3, s), ...PB.uint(4, ms)]; },
+  setSystemTimeParams(ms) {
+    const d = new Date(ms);
+    return [...PB.bytes(1, Polar.date(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate())),
+            ...PB.bytes(2, Polar.time(d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds())),
+            ...PB.bool(3, true)];
+  },
+  setLocalTimeParams(ms) {
+    const d = new Date(ms);
+    return [...PB.bytes(1, Polar.date(d.getFullYear(), d.getMonth() + 1, d.getDate())),
+            ...PB.bytes(2, Polar.time(d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds())),
+            ...PB.int(3, -d.getTimezoneOffset())];
+  },
+  parseDuration(u8) {
+    let ms = 0;
+    for (const f of PB.fields(u8)) {
+      if (f.wire !== 0) continue;
+      if (f.field === 1) ms += f.value * 3600000;
+      else if (f.field === 2) ms += f.value * 60000;
+      else if (f.field === 3) ms += f.value * 1000;
+      else if (f.field === 4) ms += f.value;
+    }
+    return ms;
+  },
+  parseDateTime(u8) {
+    const r = { y: 0, mo: 0, d: 0, h: 0, mi: 0, s: 0, ms: 0, trusted: null };
+    for (const f of PB.fields(u8)) {
+      if (f.field === 1 && f.wire === 2) for (const g of PB.fields(f.value)) { if (g.field === 1) r.y = g.value; if (g.field === 2) r.mo = g.value; if (g.field === 3) r.d = g.value; }
+      if (f.field === 2 && f.wire === 2) for (const g of PB.fields(f.value)) { if (g.field === 1) r.h = g.value; if (g.field === 2) r.mi = g.value; if (g.field === 3) r.s = g.value; if (g.field === 4) r.ms = g.value; }
+      if (f.field === 3 && f.wire === 0) r.trusted = !!f.value;
+    }
+    if (!r.y) return null;
+    return { utcMs: Date.UTC(r.y, r.mo - 1, r.d, r.h, r.mi, r.s, r.ms), trusted: r.trusted };
+  },
+  parseDirectory(u8) {
+    const entries = [];
+    for (const f of PB.fields(u8)) {
+      if (f.field !== 1 || f.wire !== 2) continue;
+      const e = { name: '', size: 0, created: null, modified: null };
+      for (const g of PB.fields(f.value)) {
+        if (g.field === 1 && g.wire === 2) e.name = PB.text(g.value);
+        else if (g.field === 2 && g.wire === 0) e.size = g.value;
+        else if (g.field === 3 && g.wire === 2) e.created = Polar.parseDateTime(g.value);
+        else if (g.field === 4 && g.wire === 2) e.modified = Polar.parseDateTime(g.value);
+      }
+      if (e.name) entries.push(e);
+    }
+    return entries;
+  },
+  parseRecordingStatus(u8) {
+    const r = { on: false, id: '' };
+    for (const f of PB.fields(u8)) {
+      if (f.field === 1 && f.wire === 0) r.on = !!f.value;
+      if (f.field === 2 && f.wire === 2) r.id = PB.text(f.value);
+    }
+    return r;
+  },
+  /* PbExerciseSamples: 1 recording_interval, 2 heart_rate_samples, 3 heart_rate_offline,
+     28 rr_samples { 1 rr_intervals (ms), 2 rr_sensor_offline { 1 start_time, 2 time_interval } } */
+  parseSamples(u8) {
+    const out = { intervalMs: null, hr: [], hrOffline: [], rr: [], rrOffline: [], hasRr: false, pauseTimes: 0, unknown: [] };
+    for (const f of PB.fields(u8)) {
+      if (f.field === 1 && f.wire === 2) out.intervalMs = Polar.parseDuration(f.value);
+      else if (f.field === 2) { if (f.wire === 2) { for (const v of PB.packed(f.value)) out.hr.push(v); } else if (f.wire === 0) out.hr.push(f.value); }
+      else if (f.field === 3 && f.wire === 2) {
+        const o = { start: null, stop: null };
+        for (const g of PB.fields(f.value)) { if (g.field === 1) o.start = g.value; if (g.field === 2) o.stop = g.value; }
+        out.hrOffline.push(o);
+      }
+      else if (f.field === 28 && f.wire === 2) {
+        out.hasRr = true;
+        for (const g of PB.fields(f.value)) {
+          if (g.field === 1) { if (g.wire === 2) { for (const v of PB.packed(g.value)) out.rr.push(v); } else if (g.wire === 0) out.rr.push(g.value); }
+          else if (g.field === 2 && g.wire === 2) {
+            const o = { startMs: 0, durMs: 0 };
+            for (const h of PB.fields(g.value)) {
+              if (h.field === 1 && h.wire === 2) o.startMs = Polar.parseDuration(h.value);
+              if (h.field === 2 && h.wire === 2) o.durMs = Polar.parseDuration(h.value);
+            }
+            out.rrOffline.push(o);
+          }
+          else out.unknown.push('28.' + g.field);
+        }
+      }
+      else if (f.field === 30) out.pauseTimes++;
+      else out.unknown.push(String(f.field));
+    }
+    return out;
+  },
+};
+
+/* --------------------------------------------- PS-FTP transport (RFC76/RFC60) */
+function queryMessage(id, params) { return new Uint8Array([id & 0xff, ((id >> 8) & 0x7f) | 0x80, ...(params || [])]); }
+function requestMessage(op) { return new Uint8Array([op.length & 0xff, (op.length >> 8) & 0x7f, ...op]); }
+function buildFrames(msg, frameSize) {
+  const frames = [], chunk = frameSize - 1;
+  let off = 0, seq = 0, first = true;
+  do {
+    const remaining = msg.length - off, more = remaining > chunk, n = more ? chunk : remaining;
+    const f = new Uint8Array(n + 1);
+    f[0] = (first ? 0 : 1) | (more ? 0x06 : 0x02) | ((seq & 0x0f) << 4);
+    f.set(msg.subarray(off, off + n), 1);
+    frames.push(f);
+    off += n; seq = (seq + 1) & 0x0f; first = false;
+  } while (off < msg.length);
+  return frames;
+}
+class PftpError extends Error {
+  constructor(code, message) {
+    super(message || `Sensor error ${code}${PFTP_ERRORS[code] ? ' (' + PFTP_ERRORS[code] + ')' : ''}`);
+    this.code = code;
+  }
+}
+class RxAssembler {
+  constructor(onProgress) {
+    this.seq = 0; this.expectNext = 0; this.parts = []; this.size = 0; this.onProgress = onProgress;
+    this.done = false; this.needsCancel = false;
+    this.promise = new Promise((res, rej) => { this.res = res; this.rej = rej; });
+    this.arm();
+  }
+  arm() { clearTimeout(this.timer); this.timer = setTimeout(() => this.fail(new PftpError(108, 'No answer from the sensor (timeout).')), IDLE_TIMEOUT_MS); }
+  push(f) {
+    if (this.done || !f.length) return;
+    this.arm();
+    const next = f[0] & 1, status = (f[0] >> 1) & 3, seq = (f[0] >> 4) & 0x0f;
+    if (seq !== this.seq) { this.needsCancel = status === 3; this.fail(new PftpError(303, 'A Bluetooth packet was lost.')); return; }
+    this.seq = (this.seq + 1) & 0x0f;
+    if (next !== this.expectNext) { this.fail(new PftpError(200, 'Transfer out of sync.')); return; }
+    this.expectNext = 1;
+    if (status === 0) {
+      const code = f.length >= 3 ? (f[1] | (f[2] << 8)) : (f.length === 2 ? f[1] : 0);
+      if (code === 0) this.finish(); else this.fail(new PftpError(code));
+      return;
+    }
+    if (status === 1 || status === 3) {
+      const p = f.subarray(1);
+      this.parts.push(p); this.size += p.length;
+      if (this.onProgress) this.onProgress(this.size);
+      if (status === 1) this.finish();
+      return;
+    }
+    this.fail(new PftpError(200, 'Undefined transfer status.'));
+  }
+  finish() {
+    if (this.done) return;
+    this.done = true; clearTimeout(this.timer);
+    const out = new Uint8Array(this.size); let o = 0;
+    for (const p of this.parts) { out.set(p, o); o += p.length; }
+    this.res(out);
+  }
+  fail(e) { if (this.done) return; this.done = true; clearTimeout(this.timer); this.rej(e); }
+  dispose() { clearTimeout(this.timer); this.done = true; }
+}
+class PsftpClient {
+  constructor(mtuChar, tag) {
+    this.char = mtuChar; this.tag = tag; this.rx = null; this.chain = Promise.resolve();
+    this.onFrame = this.onFrame.bind(this);
+    mtuChar.addEventListener('characteristicvaluechanged', this.onFrame);
+  }
+  detach() {
+    try { this.char.removeEventListener('characteristicvaluechanged', this.onFrame); } catch (e) { /* ignore */ }
+    if (this.rx) this.rx.fail(new Error('The sensor disconnected.'));
+  }
+  onFrame(ev) {
+    const dv = ev.target.value;
+    const u8 = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength).slice();
+    if (this.rx) this.rx.push(u8); else log(this.tag, 'stray packet', hex(u8, 8));
+  }
+  write(frame) {
+    const c = this.char, p = c.properties || {};
+    if (p.write && c.writeValueWithResponse) return c.writeValueWithResponse(frame);
+    if (p.writeWithoutResponse && c.writeValueWithoutResponse) return c.writeValueWithoutResponse(frame);
+    return c.writeValue(frame);
+  }
+  transact(message, label, onProgress) {
+    const run = async () => {
+      const rx = new RxAssembler(onProgress);
+      this.rx = rx;
+      try {
+        for (const f of buildFrames(message, FRAME_SIZE)) await this.write(f);
+        const out = await rx.promise;
+        log(this.tag, label, 'ok', out.length + ' bytes');
+        return out;
+      } catch (e) {
+        log(this.tag, label, 'failed:', errText(e));
+        if (rx.needsCancel) { try { await this.write(new Uint8Array([0, 0, 0])); } catch (_) { /* ignore */ } await sleep(400); }
+        throw e;
+      } finally {
+        rx.dispose();
+        if (this.rx === rx) this.rx = null;
+      }
+    };
+    const p = this.chain.then(run, run);
+    this.chain = p.catch(() => {});
+    return p;
+  }
+  query(id, params, label) { return this.transact(queryMessage(id, params), label || ('query ' + id)); }
+  request(op, label, onProgress) { return this.transact(requestMessage(op), label || 'request', onProgress); }
+}
+
+/* ------------------------------------------------------ H10 recording commands */
+const H10 = {
+  async status(c) {
+    const r = await c.query(QUERY.RECORDING_STATUS, null, 'recording status');
+    return r.length ? Polar.parseRecordingStatus(r) : { on: false, id: '' };
+  },
+  start(c, id) { return c.query(QUERY.START_RECORDING, Polar.startRecordingParams(SAMPLE_TYPE_RR, 1, id), 'start recording ' + id); },
+  stop(c) { return c.query(QUERY.STOP_RECORDING, null, 'stop recording'); },
+  async setTime(c) {
+    try { await c.query(QUERY.SET_SYSTEM_TIME, Polar.setSystemTimeParams(Date.now()), 'set system time'); } catch (e) { /* optional */ }
+    try { await c.query(QUERY.SET_LOCAL_TIME, Polar.setLocalTimeParams(Date.now()), 'set local time'); } catch (e) { /* optional */ }
+  },
+  async list(c) {
+    const root = Polar.parseDirectory(await c.request(Polar.operation(CMD.GET, '/'), 'list /'));
+    log(c.tag, 'memory:', root.map(e => `${e.name} (${e.size})`).join(', ') || 'empty');
+    const out = [];
+    for (const e of root) {
+      if (!e.name.endsWith('/')) continue;
+      const id = e.name.slice(0, -1);
+      let file = null;
+      try {
+        const sub = Polar.parseDirectory(await c.request(Polar.operation(CMD.GET, '/' + e.name), 'list /' + e.name));
+        file = sub.find(x => x.name === 'SAMPLES.BPB') || null;
+      } catch (err) { log(c.tag, 'could not list', e.name, errText(err)); }
+      out.push({ id, path: file ? `/${id}/SAMPLES.BPB` : null, size: file ? file.size : 0,
+                 created: file ? file.created : null, modified: file ? file.modified : null });
+    }
+    return out;
+  },
+  fetch(c, path, onProgress) { return c.request(Polar.operation(CMD.GET, path), 'download ' + path, onProgress); },
+  async remove(c, entry) {
+    if (entry.path) await c.request(Polar.operation(CMD.REMOVE, entry.path), 'remove ' + entry.path);
+    const left = Polar.parseDirectory(await c.request(Polar.operation(CMD.GET, '/'), 'list /'));
+    if (left.some(e => e.name === entry.id + '/')) {
+      try { await c.request(Polar.operation(CMD.REMOVE, '/' + entry.id + '/'), 'remove dir'); } catch (e) { /* checked by caller */ }
+    }
+  },
+};
+
+/* --------------------------------------------------------- analysis & files */
+const ANALYSIS = new Map();
+function analyse(sess) {
+  if (ANALYSIS.has(sess.key)) return ANALYSIS.get(sess.key);
+  const bytes = b64decode(sess.raw);
+  const p = Polar.parseSamples(bytes);
+  const a = { p, mode: p.rr.length ? 'rr' : (p.hr.length ? 'hr' : 'empty'), rows: [], gaps: [], trailing: [] };
+  if (a.mode === 'rr') {
+    const gaps = p.rrOffline.slice().sort((x, y) => x.startMs - y.startMs);
+    let T = 0, gi = 0, sum = 0;
+    for (let i = 0; i < p.rr.length; i++) {
+      const rr = p.rr[i];
+      let gapBefore = 0;
+      while (gi < gaps.length && T + rr > gaps[gi].startMs) {
+        const g = gaps[gi], end = g.startMs + g.durMs;
+        a.gaps.push({ startMs: g.startMs, durMs: g.durMs, firstBeat: i + 1 });
+        gapBefore += g.durMs;
+        if (end > T) T = end;
+        gi++;
+      }
+      T += rr; sum += rr;
+      a.rows.push({ beat: i + 1, rr, t: T, gapBefore });
+    }
+    for (; gi < gaps.length; gi++) { a.trailing.push(gaps[gi]); a.gaps.push({ startMs: gaps[gi].startMs, durMs: gaps[gi].durMs, firstBeat: null }); }
+    a.sumRrMs = sum;
+    a.endMs = Math.max(T, ...a.trailing.map(g => g.startMs + g.durMs), 0);
+  } else if (a.mode === 'hr') {
+    const iv = p.intervalMs || 1000;
+    p.hr.forEach((v, i) => a.rows.push({ beat: i + 1, hr: v, t: (i + 1) * iv }));
+    a.endMs = p.hr.length * iv;
+  } else {
+    a.endMs = 0;
+  }
+  a.offlineTotalMs = a.gaps.reduce((s, g) => s + g.durMs, 0);
+  if (sess.startMs != null && sess.stopMs != null) {
+    a.elapsedS = (sess.stopMs - sess.startMs) / 1000;
+    a.diffS = a.elapsedS - a.endMs / 1000;
+    a.qc = (a.diffS >= QC_LOW_S && a.diffS <= QC_HIGH_S) ? 'ok' : 'check';
+  } else { a.elapsedS = null; a.diffS = null; a.qc = 'n/a'; }
+  ANALYSIS.set(sess.key, a);
+  return a;
+}
+function qcShort(a) {
+  if (a.qc === 'ok') return `<span class="qc-ok">OK</span> (Δ ${a.diffS.toFixed(1)} s)`;
+  if (a.qc === 'check') return `<span class="qc-check">CHECK</span> (${a.diffS.toFixed(1)} s unexplained)`;
+  return 'not available';
+}
+function baseName(sess) {
+  const t = sess.startMs != null ? sess.startMs : sess.downloadedMs;
+  const d = new Date(t);
+  return `${sess.pid || 'UNKNOWN'}_${sess.slot}_${fmtDate(t)}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+function buildCsv(sess, a) {
+  const pid = sess.pid || '', sid = sensorCode(sess.sensorName);
+  const lines = [];
+  if (a.mode === 'hr') {
+    lines.push('participant_id,h10,sensor_id,sample,hr_bpm,time_s,clock_time,epoch_ms');
+    for (const r of a.rows) {
+      const abs = sess.startMs != null ? sess.startMs + r.t : null;
+      lines.push([pid, sess.slot, sid, r.beat, r.hr, (r.t / 1000).toFixed(3), abs != null ? fmtDateTime(abs, true) : '', abs != null ? Math.round(abs) : ''].join(','));
+    }
+  } else {
+    lines.push('participant_id,h10,sensor_id,beat,rr_ms,time_s,clock_time,epoch_ms,gap_before_s');
+    for (const r of a.rows) {
+      const abs = sess.startMs != null ? sess.startMs + r.t : null;
+      lines.push([pid, sess.slot, sid, r.beat, r.rr, (r.t / 1000).toFixed(3), abs != null ? fmtDateTime(abs, true) : '',
+                  abs != null ? Math.round(abs) : '', r.gapBefore ? (r.gapBefore / 1000).toFixed(3) : ''].join(','));
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+function buildInfo(sess, a) {
+  const L = [];
+  const clockAt = ms => (sess.startMs != null ? ` (${fmtDateTime(sess.startMs + ms, true)})` : '');
+  L.push('H10 RR recording - session information');
+  L.push('=======================================');
+  L.push(`participant_id: ${sess.pid || ''}`);
+  L.push(`h10_label: ${sess.slot}`);
+  L.push(`sensor: ${sess.sensorName || '?'}${sess.fw ? ' (firmware ' + sess.fw + ')' : ''}`);
+  L.push(`exercise_id_in_sensor: ${sess.exerciseId}`);
+  L.push(`timezone: ${tzLabel(sess.startMs != null ? sess.startMs : sess.downloadedMs)} (all clock times are local iPad time)`);
+  L.push('');
+  L.push(`recording_start: ${sess.startMs != null ? fmtDateTime(sess.startMs, true) : 'unknown'}`);
+  L.push(`start_time_source: ${sess.startSource || 'unknown'}`);
+  if (sess.startT0 != null && sess.startT1 != null) L.push(`start_command_round_trip_ms: ${sess.startT1 - sess.startT0}`);
+  L.push(`recording_stop: ${sess.stopMs != null ? fmtDateTime(sess.stopMs, true) : 'unknown (not stopped from this iPad)'}`);
+  L.push(`downloaded: ${fmtDateTime(sess.downloadedMs)}`);
+  L.push('');
+  if (a.mode === 'rr') {
+    L.push('data_type: RR intervals (ms), as stored by the H10');
+    L.push(`beats: ${a.rows.length}`);
+    L.push(`sum_of_rr_s: ${(a.sumRrMs / 1000).toFixed(3)} (${fmtDur(a.sumRrMs / 1000)})`);
+    L.push(`sensor_offline_periods_reported_by_h10: ${a.gaps.length}`);
+    a.gaps.forEach((g, i) => {
+      L.push(`  #${i + 1}: starts ${fmtOffset(g.startMs)} after start${clockAt(g.startMs)}, duration ${(g.durMs / 1000).toFixed(3)} s, ` +
+             (g.firstBeat ? `first beat after it: #${g.firstBeat}` : 'after the last beat'));
+    });
+    L.push(`total_offline_s: ${(a.offlineTotalMs / 1000).toFixed(3)}`);
+  } else if (a.mode === 'hr') {
+    L.push(`data_type: heart rate (bpm) every ${(a.p.intervalMs || 1000) / 1000} s (this sensor recorded HR, not RR)`);
+    L.push(`samples: ${a.rows.length}`);
+    L.push(`heart_rate_offline_periods: ${a.p.hrOffline.map(o => `${o.start}-${o.stop}`).join(', ') || 'none'}`);
+  } else {
+    L.push('data_type: EMPTY - the file contains no RR or HR samples');
+  }
+  L.push(`reconstructed_duration_s: ${(a.endMs / 1000).toFixed(3)} (start to last sample, including offline periods)`);
+  L.push(`elapsed_start_to_stop_s: ${a.elapsedS != null ? a.elapsedS.toFixed(3) : 'unknown'}`);
+  if (a.qc === 'ok') L.push(`timing_check: OK - difference ${a.diffS.toFixed(2)} s (expected between ${QC_LOW_S} and +${QC_HIGH_S} s)`);
+  else if (a.qc === 'check') {
+    L.push(`timing_check: CHECK - ${a.diffS.toFixed(2)} s of the recording are not explained by the RR data and the offline periods reported by the sensor.`);
+    L.push('  clock_time values after an unreported gap would be early by up to this amount.');
+    L.push('  Possible causes: strap removed or sensor unclipped before Stop, or contact loss not reported by the H10.');
+  } else L.push('timing_check: not available (start or stop time unknown)');
+  L.push('');
+  L.push(`sensor_file_bytes: ${sess.fileSize}`);
+  if (sess.sensorCreated || sess.sensorModified) {
+    L.push(`sensor_file_created: ${sess.sensorCreated ? fmtUtc(sess.sensorCreated.utcMs) : 'n/a'} (sensor clock)`);
+    L.push(`sensor_file_modified: ${sess.sensorModified ? fmtUtc(sess.sensorModified.utcMs) : 'n/a'} (sensor clock)`);
+  }
+  L.push(`other_fields: heart_rate_samples=${a.p.hr.length}, heart_rate_offline=${a.p.hrOffline.length}, pause_times=${a.p.pauseTimes}, unknown=${a.p.unknown.join(' ') || 'none'}`);
+  L.push('');
+  L.push('How clock_time is computed: recording_start + cumulative RR intervals, plus the duration of each');
+  L.push('offline period reported by the H10, inserted where it occurred. Each beat time is the end of its RR');
+  L.push('interval; uncertainty is about one beat. The raw sensor file (_raw.bpb) is included for re-analysis.');
+  L.push(`recorder_version: ${APP_VERSION}`);
+  return L.join('\n') + '\n';
+}
+function summaryLine(sess, a) {
+  const start = sess.startMs != null ? fmtClock(sess.startMs) : '?';
+  const stop = sess.stopMs != null ? fmtClock(sess.stopMs) : '?';
+  const n = a.mode === 'hr' ? `${a.rows.length} HR samples` : `${a.rows.length} beats`;
+  const qc = a.qc === 'ok' ? 'timing check OK' : (a.qc === 'check' ? `timing check: ${a.diffS.toFixed(1)} s unexplained` : 'timing check n/a');
+  return `${sess.pid} · ${sess.slot} (${sensorCode(sess.sensorName)}) · ${fmtDate(sess.startMs != null ? sess.startMs : sess.downloadedMs)} ${start}-${stop} · ${n} · offline periods: ${a.gaps.length} (${(a.offlineTotalMs / 1000).toFixed(1)} s) · ${qc}`;
+}
+function buildFiles(sess) {
+  const a = analyse(sess), base = baseName(sess);
+  return {
+    a, base,
+    files: [
+      new File([buildCsv(sess, a)], `${base}_RR.csv`, { type: 'text/csv' }),
+      new File([buildInfo(sess, a)], `${base}_info.txt`, { type: 'text/plain' }),
+      new File([b64decode(sess.raw)], `${base}_raw.bpb`, { type: 'application/octet-stream' }),
+    ],
+  };
+}
+
+/* ------------------------------------------------------------ connection ctx */
+const CTX = {};
+for (const id of SLOT_IDS) CTX[id] = { device: null, psftp: null, connected: false, busy: false, busyText: '', battery: null, fw: '',
+  hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, msg: null, lastKey: null, listening: false };
+const C = id => CTX[id];
+
+function findSession(exerciseId, sensorName) {
+  return Object.values(STATE.sessions).find(s => s.exerciseId === exerciseId && sensorCode(s.sensorName) === sensorCode(sensorName)) || null;
+}
+function activeMatches(slot, id) { return !!(slot.active && (slot.active.exerciseId === id || slot.active.sensorId === id)); }
+
+/* --------------------------------------------------------------------- UI */
+function setMsg(id, type, text) { C(id).msg = text ? { type, text } : null; updateSlot(id); }
+function setBusy(id, text) { const c = C(id); c.busy = !!text; c.busyText = text || ''; updateSlot(id); }
+
+function slotSkeleton(id) {
+  return `<div class="card" data-slot="${id}">
+    <div class="card-head"><span class="slot-name">${id}</span><span class="conn" data-f="conn"></span></div>
+    <div class="meta" data-f="meta"></div>
+    <div class="meta" data-f="hr"></div>
+    <label class="pid">Participant ID <input type="text" data-f="pid" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="16" placeholder="e.g. P001"></label>
+    <div class="status" data-f="status"></div>
+    <div class="actions" data-f="actions"></div>
+    <div class="msg" data-f="msg" hidden></div>
+    <div class="summary" data-f="summary" hidden></div>
+  </div>`;
+}
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+function btn(action, label, cls, disabled) { return `<button data-action="${action}"${cls ? ` class="${cls}"` : ''}${disabled ? ' disabled' : ''}>${label}</button>`; }
+
+function slotStartMs(id) {
+  const slot = S(id), c = C(id);
+  if (slot.active && (!c.connected || !c.recId || activeMatches(slot, c.recId))) return slot.active.startMs;
+  return parseIdStamp(c.recId);
+}
+
+function updateSlot(id) {
+  const card = document.querySelector(`[data-slot="${id}"]`);
+  if (!card) return;
+  const slot = S(id), c = C(id), now = Date.now();
+  const f = name => card.querySelector(`[data-f="${name}"]`);
+
+  const conn = f('conn');
+  conn.textContent = c.busy ? 'Working…' : (c.connected ? '● Connected' : '○ Not connected');
+  conn.className = 'conn' + (c.connected ? ' on' : '');
+
+  const meta = [];
+  meta.push(slot.sensorName ? `Sensor <b>${esc(sensorCode(slot.sensorName))}</b>` : 'No sensor assigned yet');
+  if (c.connected && c.battery != null) meta.push(`battery ${c.battery}%`);
+  if (c.connected && c.fw) meta.push(`firmware ${esc(c.fw)}${cmpVersion(c.fw, '4.2.0') < 0 ? ' <b style="color:var(--warn)">(update recommended)</b>' : ''}`);
+  if (!c.connected && slot.sensorName && !slot.active && !c.busy) meta.push(`<button class="link" data-action="unassign">use another sensor</button>`);
+  setHTML(f('meta'), meta.join(' · '));
+
+  const hrEl = f('hr');
+  if (c.connected && c.hr != null && now - c.hrAt < 5000) {
+    setHTML(hrEl, `Live heart rate <b>${c.hr} bpm</b>` + (c.contact === true ? ' · skin contact ✓' : (c.contact === false ? ' · <b style="color:var(--err)">no skin contact</b>' : '')));
+  } else if (c.connected) {
+    setHTML(hrEl, 'Live heart rate: waiting… (strap worn and electrodes wet?)');
+  } else setHTML(hrEl, '');
+
+  const input = f('pid');
+  const recordingLocal = !!(slot.active && slot.active.stopMs == null);
+  const lockPid = recordingLocal || (c.connected && c.recOn);
+  if (document.activeElement !== input) input.value = lockPid && slot.active ? slot.active.pid : (slot.pid || '');
+  input.disabled = lockPid || c.busy;
+
+  // status line
+  const st = f('status');
+  let cls = '', html = '';
+  if (c.busy) { html = esc(c.busyText); }
+  else if (c.connected && c.recOn) {
+    const t = slotStartMs(id);
+    cls = 'rec';
+    html = `● RECORDING${t ? ' since ' + fmtClock(t) : ''}<small>${t ? 'elapsed ' + fmtDur((now - t) / 1000) + ' · ' : ''}ID ${esc(c.recId)}</small>`;
+  } else if (c.connected && c.entries && c.entries.length) {
+    const e = c.entries[0], sess = findSession(e.id, slot.sensorName);
+    cls = 'mem';
+    html = `Sensor memory holds recording ${esc(e.id)}<small>${sess ? 'downloaded ✓' + (sess.sentMs ? ' · emailed ✓' : ' · not emailed yet') : 'not downloaded yet'}</small>`;
+  } else if (c.connected && c.entries) {
+    cls = 'ready'; html = 'Ready · sensor memory empty';
+  } else if (c.connected) {
+    html = 'Connected';
+  } else if (recordingLocal) {
+    cls = 'rec';
+    html = `● RECORDING since ${fmtClock(slot.active.startMs)}<small>elapsed ${fmtDur((now - slot.active.startMs) / 1000)} · participant ${esc(slot.active.pid)} · connect to stop</small>`;
+  } else if (slot.active && slot.active.stopMs != null) {
+    const sess = findSession(slot.active.exerciseId, slot.sensorName);
+    cls = 'mem';
+    html = `Stopped at ${fmtClock(slot.active.stopMs)}<small>${sess ? 'downloaded ✓' + (sess.sentMs ? ' · emailed ✓' : ' · not emailed yet') + ' · sensor memory not cleared yet' : 'not downloaded yet · connect to download'}</small>`;
+  } else {
+    html = 'Not connected';
+  }
+  st.className = 'status' + (cls ? ' ' + cls : '');
+  setHTML(st, html);
+  card.classList.toggle('recording', cls === 'rec');
+
+  // actions
+  const b = [], dis = c.busy;
+  if (!c.connected) {
+    b.push(btn('connect', 'Connect', 'primary', dis));
+    const sess = slot.active ? findSession(slot.active.exerciseId, slot.sensorName) : null;
+    if (sess) b.push(btn('email-slot', 'Email data', '', dis));
+  } else if (c.recOn) {
+    b.push(btn('stop', 'Stop &amp; download', 'stop', dis));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else if (c.entries && c.entries.length) {
+    const downloaded = c.entries.every(e => findSession(e.id, slot.sensorName));
+    if (downloaded) { b.push(btn('email-slot', 'Email data', 'primary', dis)); b.push(btn('download', 'Download again', '', dis)); }
+    else b.push(btn('download', 'Download', 'primary', dis));
+    b.push(btn('clear', 'Clear sensor memory', 'danger', dis));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else if (c.entries) {
+    b.push(btn('start', 'Start recording', 'primary', dis || !sanitizePid(input.value)));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else {
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  }
+  setHTML(f('actions'), b.join(''));
+
+  const m = f('msg');
+  if (c.msg) { m.hidden = false; m.className = 'msg ' + c.msg.type; m.textContent = c.msg.text; } else m.hidden = true;
+
+  const sumEl = f('summary');
+  const key = c.lastKey || (slot.active ? (findSession(slot.active.exerciseId, slot.sensorName) || {}).key : null);
+  const sess = key ? STATE.sessions[key] : null;
+  if (sess) {
+    const a = analyse(sess);
+    sumEl.hidden = false;
+    setHTML(sumEl, `Last download: <b>${esc(sess.pid)}</b> · ${a.mode === 'hr' ? a.rows.length + ' HR samples' : a.rows.length + ' beats'} · ${fmtDur(a.endMs / 1000)} · offline periods reported by sensor: <b>${a.gaps.length}</b>${a.gaps.length ? ' (' + (a.offlineTotalMs / 1000).toFixed(1) + ' s)' : ''} · timing check: ${qcShort(a)}`);
+  } else sumEl.hidden = true;
+}
+
+function renderSessions() {
+  const list = Object.values(STATE.sessions).sort((x, y) => y.downloadedMs - x.downloadedMs);
+  const box = $('#sessions');
+  $('#sendAllBtn').disabled = !list.some(s => !s.sentMs);
+  if (!list.length) { box.innerHTML = '<div class="meta">No recordings downloaded on this iPad yet.</div>'; return; }
+  const rows = list.map(s => {
+    let a; try { a = analyse(s); } catch (e) { a = null; }
+    return `<tr>
+      <td><b>${esc(s.pid)}</b></td><td>${esc(s.slot)}</td>
+      <td>${s.startMs != null ? fmtDate(s.startMs) + ' ' + fmtClock(s.startMs) : '?'}</td>
+      <td>${a ? fmtDur(a.endMs / 1000) : '?'}</td>
+      <td>${a ? (a.mode === 'hr' ? a.rows.length + ' HR' : a.rows.length) : '?'}</td>
+      <td>${a ? a.gaps.length : '?'}</td>
+      <td>${a ? qcShort(a) : '<span class="qc-check">file error</span>'}</td>
+      <td>${s.sentMs ? 'emailed ' + fmtClock(s.sentMs) : '<b>not yet</b>'}</td>
+      <td><div class="actions">${btn('email-one', 'Email', '', false).replace('<button', `<button data-key="${esc(s.key)}"`)}${btn('delete-one', 'Delete', 'danger', false).replace('<button', `<button data-key="${esc(s.key)}"`)}</div></td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `<table><thead><tr><th>Participant</th><th>H10</th><th>Start</th><th>Duration</th><th>Beats</th><th>Offline</th><th>Timing check</th><th>Email</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function ask(title, text, okLabel, danger) {
+  return new Promise(resolve => {
+    const modal = $('#modal');
+    $('#mTitle').textContent = title;
+    $('#mText').textContent = text;
+    const ok = $('#mOk'), cancel = $('#mCancel');
+    ok.textContent = okLabel || 'OK';
+    ok.className = danger ? 'stop' : 'primary';
+    modal.hidden = false;
+    const done = v => { modal.hidden = true; ok.onclick = cancel.onclick = null; resolve(v); };
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+  });
+}
+
+/* ---------------------------------------------------------------- actions */
+async function actConnect(id) {
+  const c = C(id), slot = S(id);
+  if (!navigator.bluetooth) { setMsg(id, 'err', 'This browser cannot use Bluetooth. On iPad, open this page in the Bluefy app.'); return; }
+  let device = c.device;
+  let chooser = null;
+  if (!device) {
+    // must be called directly from the tap
+    const filters = slot.sensorName ? [{ name: slot.sensorName }] : [{ namePrefix: 'Polar H10' }];
+    chooser = navigator.bluetooth.requestDevice({ filters, optionalServices: [UUIDS.psftp, 'battery_service', 'device_information', 'heart_rate'] });
+  }
+  setMsg(id, null);
+  setBusy(id, 'Connecting…');
+  try {
+    if (chooser) {
+      device = await chooser;
+      const other = SLOT_IDS.find(o => o !== id && S(o).sensorName === device.name);
+      if (other) throw new Error(`Sensor ${sensorCode(device.name)} is already assigned to ${other}. Pick the sensor labelled ${id}.`);
+      c.device = device;
+    }
+    if (!device._h10Listener) {
+      device._h10Listener = true;
+      device.addEventListener('gattserverdisconnected', () => onDisconnected(id, device));
+    }
+    await withTimeout(device.gatt.connect(), 20000, 'Could not connect. Is the strap worn (wet electrodes) and the sensor close to the iPad?');
+    log(id, 'connected to', device.name);
+    await setupLink(id);
+    if (!slot.sensorName) { slot.sensorName = device.name; saveState(); }
+    setBusy(id, 'Reading sensor status…');
+    await refresh(id);
+    if (c.recOn) setMsg(id, 'info', 'The sensor is recording. Tap “Stop & download” at the end of the session.');
+    else if (c.entries && c.entries.length) setMsg(id, 'warn', 'The sensor memory still holds a recording. Download it, email it, then clear the memory.');
+    else setMsg(id, 'ok', 'Ready. Check the live heart rate, type the participant ID and tap “Start recording”.');
+  } catch (e) {
+    log(id, 'connect failed:', errText(e));
+    if (e && e.name === 'NotFoundError') setMsg(id, 'info', 'No sensor selected.');
+    else setMsg(id, 'err', errText(e));
+    if (!c.connected) { c.device = null; try { device && device.gatt && device.gatt.connected && device.gatt.disconnect(); } catch (_) { /* ignore */ } }
+  } finally { setBusy(id, null); renderSessions(); }
+}
+
+async function setupLink(id) {
+  const c = C(id), gatt = c.device.gatt;
+  const svc = await gatt.getPrimaryService(UUIDS.psftp);
+  const mtu = await svc.getCharacteristic(UUIDS.mtu);
+  let d2h = null;
+  try { d2h = await svc.getCharacteristic(UUIDS.d2h); } catch (e) { /* optional */ }
+  if (c.psftp) c.psftp.detach();
+  c.psftp = new PsftpClient(mtu, id);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { await mtu.startNotifications(); lastErr = null; break; }
+    catch (e) {
+      lastErr = e; log(id, 'enable notifications failed:', errText(e));
+      setMsg(id, 'info', 'If a Bluetooth pairing request appears on the iPad, tap “Pair”.');
+      await sleep(2500);
+    }
+  }
+  if (lastErr) throw lastErr;
+  if (d2h) {
+    try { d2h.addEventListener('characteristicvaluechanged', ev => { const v = ev.target.value; log(id, 'sensor notification', hex(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))); }); await d2h.startNotifications(); }
+    catch (e) { log(id, 'notification channel not available:', errText(e)); }
+  }
+  c.connected = true;
+  try { const bs = await gatt.getPrimaryService('battery_service'); const bl = await bs.getCharacteristic('battery_level'); c.battery = (await bl.readValue()).getUint8(0); } catch (e) { log(id, 'battery level n/a'); }
+  try { const ds = await gatt.getPrimaryService('device_information'); const fc = await ds.getCharacteristic('firmware_revision_string'); const dv = await fc.readValue(); c.fw = PB.text(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)).replace(/\0/g, '').trim(); log(id, 'firmware', c.fw); } catch (e) { log(id, 'firmware version n/a'); }
+  try {
+    const hs = await gatt.getPrimaryService('heart_rate');
+    const hc = await hs.getCharacteristic('heart_rate_measurement');
+    hc.addEventListener('characteristicvaluechanged', ev => onHr(id, ev));
+    await hc.startNotifications();
+  } catch (e) { log(id, 'live heart rate n/a:', errText(e)); }
+  updateSlot(id);
+}
+
+function onHr(id, ev) {
+  const c = C(id), dv = ev.target.value;
+  if (!dv || dv.byteLength < 2) return;
+  const flags = dv.getUint8(0);
+  c.hr = (flags & 1) ? dv.getUint16(1, true) : dv.getUint8(1);
+  c.contact = (flags & 0x04) ? !!(flags & 0x02) : null;
+  const first = !c.hrAt || Date.now() - c.hrAt > 5000;
+  c.hrAt = Date.now();
+  if (first) updateSlot(id);
+}
+
+function onDisconnected(id, device) {
+  const c = C(id);
+  if (c.device !== device) return;
+  log(id, 'disconnected');
+  if (c.psftp) c.psftp.detach();
+  Object.assign(c, { psftp: null, connected: false, hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, battery: null });
+  updateSlot(id);
+}
+
+async function refresh(id) {
+  const c = C(id), slot = S(id);
+  const st = await H10.status(c.psftp);
+  c.recOn = st.on; c.recId = st.id;
+  c.entries = st.on ? [] : await H10.list(c.psftp);
+  if (st.on && !activeMatches(slot, st.id)) {
+    if (!slot.active || slot.active.stopMs != null) {
+      slot.active = { exerciseId: st.id, sensorId: st.id, pid: pidFromId(st.id), sensorName: slot.sensorName, startMs: parseIdStamp(st.id),
+        startSource: 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)', stopMs: null, fw: c.fw };
+      saveState();
+      log(id, 'adopted recording started elsewhere:', st.id);
+    } else {
+      log(id, 'WARNING sensor recording id', st.id, 'differs from local', slot.active.exerciseId);
+    }
+  }
+  if (!st.on && slot.active && slot.active.stopMs == null && !(c.entries || []).some(e => activeMatches(slot, e.id))) {
+    log(id, 'local record says recording but sensor is idle and has no matching file');
+  }
+  updateSlot(id);
+}
+
+async function actStart(id) {
+  const c = C(id), slot = S(id);
+  const input = document.querySelector(`[data-slot="${id}"] [data-f="pid"]`);
+  const pid = sanitizePid(input.value);
+  if (!pid) { setMsg(id, 'err', 'Type the participant ID first.'); return; }
+  if (Object.entries(STATE.slots).some(([o, s]) => o !== id && s.active && s.active.stopMs == null && s.active.pid === pid)) {
+    if (!await ask('Participant ID already recording', `${pid} is already being recorded on another sensor. Start anyway?`, 'Start anyway')) return;
+  }
+  if (!await ask('Start recording?', `Participant ${pid} on ${id} (sensor ${sensorCode(slot.sensorName)}).`, 'Start recording')) return;
+  setMsg(id, null);
+  setBusy(id, 'Starting recording…');
+  try {
+    const st = await H10.status(c.psftp);
+    if (st.on) throw new Error(`The sensor is already recording (${st.id}).`);
+    c.entries = await H10.list(c.psftp);
+    if (c.entries.length) throw new Error('The sensor memory still holds a previous recording. Download and clear it first.');
+    await H10.setTime(c.psftp);
+    const t0 = Date.now();
+    const exerciseId = `${pid}_${idStamp(t0)}`;
+    await H10.start(c.psftp, exerciseId);
+    const t1 = Date.now();
+    slot.pid = pid;
+    slot.active = { exerciseId, sensorId: exerciseId, pid, sensorName: slot.sensorName, startMs: Math.round((t0 + t1) / 2), startT0: t0, startT1: t1,
+      startSource: 'iPad clock when the start command was acknowledged (midpoint of command round trip)', stopMs: null, fw: c.fw };
+    saveState();
+    let st2 = await H10.status(c.psftp);
+    if (!st2.on) { await sleep(1000); st2 = await H10.status(c.psftp); }
+    if (!st2.on) { slot.active = null; saveState(); throw new Error('The sensor did not confirm that it is recording. Try again.'); }
+    if (st2.id && st2.id !== exerciseId) { slot.active.sensorId = st2.id; saveState(); log(id, 'sensor stored id as', st2.id); }
+    c.recOn = true; c.recId = st2.id || exerciseId;
+    log(id, 'recording started', exerciseId, 'at', fmtDateTime(slot.active.startMs, true));
+    setMsg(id, 'ok', `Recording started at ${fmtClock(slot.active.startMs)}. The sensor records on its own; the iPad disconnects now.`);
+    setBusy(id, null);
+    await sleep(1500);
+    if (c.device && c.device.gatt.connected) c.device.gatt.disconnect();
+  } catch (e) {
+    setMsg(id, 'err', 'Could not start: ' + errText(e));
+    try { await refresh(id); } catch (_) { /* ignore */ }
+  } finally { setBusy(id, null); }
+}
+
+async function actStop(id) {
+  const c = C(id), slot = S(id);
+  const who = slot.active && activeMatches(slot, c.recId) ? slot.active.pid : pidFromId(c.recId);
+  if (!await ask('Stop recording?', `Participant ${who} on ${id}. The data will be downloaded right away.`, 'Stop & download', true)) return;
+  setMsg(id, null);
+  setBusy(id, 'Stopping…');
+  try {
+    const recId = c.recId;
+    const t0 = Date.now();
+    await H10.stop(c.psftp);
+    const t1 = Date.now();
+    const stopMs = Math.round((t0 + t1) / 2);
+    if (!slot.active || !activeMatches(slot, recId)) {
+      slot.active = { exerciseId: recId, sensorId: recId, pid: pidFromId(recId), sensorName: slot.sensorName, startMs: parseIdStamp(recId),
+        startSource: 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)', fw: c.fw };
+    }
+    slot.active.stopMs = stopMs;
+    saveState();
+    log(id, 'recording stopped at', fmtDateTime(stopMs, true));
+    const st = await H10.status(c.psftp);
+    c.recOn = st.on; c.recId = st.id;
+    if (st.on) throw new Error('The sensor still reports that it is recording.');
+    await sleep(800);
+    await downloadAll(id);
+  } catch (e) {
+    setMsg(id, 'err', 'Problem: ' + errText(e));
+    try { await refresh(id); } catch (_) { /* ignore */ }
+  } finally { setBusy(id, null); renderSessions(); }
+}
+
+async function actDownload(id) {
+  setMsg(id, null);
+  setBusy(id, 'Downloading…');
+  try { await downloadAll(id); }
+  catch (e) { setMsg(id, 'err', 'Download failed: ' + errText(e) + ' Tap “Download” to try again.'); }
+  finally { setBusy(id, null); renderSessions(); }
+}
+
+async function downloadAll(id) {
+  const c = C(id), slot = S(id);
+  setBusy(id, 'Reading sensor memory…');
+  c.entries = await H10.list(c.psftp);
+  if (!c.entries.length) throw new Error('No recording found in the sensor memory.');
+  let wake = null;
+  try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { /* optional */ }
+  try {
+    for (const entry of c.entries) {
+      if (!entry.path) { log(id, 'skipping', entry.id, '(no SAMPLES.BPB)'); continue; }
+      let bytes = null, lastErr = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          setBusy(id, `Downloading ${entry.id}…`);
+          bytes = await H10.fetch(c.psftp, entry.path, n => { c.busyText = `Downloading ${entry.id}… ${(n / 1024).toFixed(1)} kB`; updateSlot(id); });
+          lastErr = null; break;
+        } catch (e) {
+          lastErr = e;
+          if (![303, 108, 202, 2, 200].includes(e.code)) break;
+          await sleep(1500);
+        }
+      }
+      if (lastErr) throw lastErr;
+      Polar.parseSamples(bytes); // throws if the file is not readable
+      const a = slot.active && (activeMatches(slot, entry.id) || (c.entries.length === 1 && slot.active.stopMs != null && !findSession(slot.active.exerciseId, slot.sensorName))) ? slot.active : null;
+      if (a && !activeMatches(slot, entry.id)) log(id, 'matched file', entry.id, 'to local record', a.exerciseId);
+      const sess = {
+        key: `${entry.id}|${sensorCode(slot.sensorName)}`,
+        exerciseId: entry.id, pid: a ? a.pid : pidFromId(entry.id), slot: id, sensorName: slot.sensorName, fw: c.fw || (a && a.fw) || '',
+        startMs: a ? a.startMs : parseIdStamp(entry.id),
+        startSource: a ? a.startSource : 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)',
+        startT0: a && a.startT0 != null ? a.startT0 : null, startT1: a && a.startT1 != null ? a.startT1 : null,
+        stopMs: a && a.stopMs != null ? a.stopMs : null,
+        downloadedMs: Date.now(), fileSize: bytes.length, sensorCreated: entry.created, sensorModified: entry.modified,
+        raw: b64encode(bytes), sentMs: null, clearedMs: null, appVersion: APP_VERSION,
+      };
+      const old = STATE.sessions[sess.key];
+      if (old && old.sentMs && old.raw === sess.raw) sess.sentMs = old.sentMs;
+      ANALYSIS.delete(sess.key);
+      STATE.sessions[sess.key] = sess;
+      c.lastKey = sess.key;
+      const an = analyse(sess);
+      log(id, 'downloaded', entry.id, bytes.length + ' bytes', an.rows.length + ' samples', 'offline', an.gaps.length, 'qc', an.qc, an.diffS);
+      if (!saveState()) setMsg(id, 'warn', 'Downloaded, but no copy could be saved on this iPad (storage full). Email the data now.');
+    }
+  } finally { if (wake) wake.release().catch(() => {}); }
+  const sess = STATE.sessions[c.lastKey];
+  const a = sess ? analyse(sess) : null;
+  if (!c.msg || c.msg.type !== 'warn') {
+    setMsg(id, a && a.qc === 'check' ? 'warn' : 'ok',
+      `Downloaded ✓ ${a ? (a.mode === 'hr' ? a.rows.length + ' HR samples' : a.rows.length + ' beats') : ''}. Now tap “Email data”, then “Clear sensor memory”.` +
+      (a && a.qc === 'check' ? ` Note: timing check shows ${a.diffS.toFixed(1)} s unexplained (see info file).` : ''));
+  }
+}
+
+async function actClear(id) {
+  const c = C(id), slot = S(id);
+  const entries = c.entries || [];
+  const notSaved = entries.filter(e => !findSession(e.id, slot.sensorName));
+  const notSent = entries.filter(e => { const s = findSession(e.id, slot.sensorName); return s && !s.sentMs; });
+  let text = 'This permanently deletes the recording from the sensor.';
+  if (notSaved.length) text = 'WARNING: this recording has NOT been downloaded to this iPad and will be lost.\n\n' + text;
+  else if (notSent.length) text += '\n\nA copy stays on this iPad, but it has not been emailed yet.';
+  if (!await ask('Clear sensor memory?', text, 'Delete from sensor', true)) return;
+  if (notSaved.length && !await ask('Are you sure?', 'The recording will be lost for good.', 'Yes, delete it', true)) return;
+  setMsg(id, null);
+  setBusy(id, 'Clearing sensor memory…');
+  try {
+    for (const e of entries) await H10.remove(c.psftp, e);
+    c.entries = await H10.list(c.psftp);
+    if (c.entries.length) throw new Error('The sensor still lists a recording. Try again.');
+    for (const e of entries) { const s = findSession(e.id, slot.sensorName); if (s) s.clearedMs = Date.now(); }
+    slot.active = null; slot.pid = ''; c.lastKey = null;
+    saveState();
+    const input = document.querySelector(`[data-slot="${id}"] [data-f="pid"]`);
+    if (input) input.value = '';
+    setMsg(id, 'ok', 'Sensor memory cleared. Ready for the next participant.');
+  } catch (e) {
+    setMsg(id, 'err', 'Could not clear: ' + errText(e));
+  } finally { setBusy(id, null); renderSessions(); }
+}
+
+function emailSessions(keys, statusSlot) {
+  const sessions = keys.map(k => STATE.sessions[k]).filter(Boolean);
+  if (!sessions.length) return;
+  const files = [], lines = [];
+  try {
+    for (const s of sessions) { const b = buildFiles(s); files.push(...b.files); lines.push(summaryLine(s, b.a)); }
+  } catch (e) {
+    const t = 'Could not prepare the files: ' + errText(e);
+    if (statusSlot) setMsg(statusSlot, 'err', t); else showFallback(t);
+    return;
+  }
+  const first = sessions[0];
+  const subject = `H10 RR data - ${sessions.map(s => s.pid).join(', ')} - ${fmtDate(first.startMs != null ? first.startMs : first.downloadedMs)}`;
+  const body = `To: ${EMAIL_TO}\n\n${lines.join('\n')}\n`;
+  const markSent = () => {
+    for (const s of sessions) s.sentMs = Date.now();
+    saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
+  };
+  if (navigator.canShare && navigator.share && navigator.canShare({ files })) {
+    navigator.share({ files, title: subject, text: body })
+      .then(() => {
+        markSent();
+        const t = `Shared. Check that the email went to ${EMAIL_TO}.`;
+        if (statusSlot) setMsg(statusSlot, 'ok', t);
+      })
+      .catch(e => {
+        log('share failed:', errText(e));
+        if (e && e.name === 'AbortError') { if (statusSlot) setMsg(statusSlot, 'info', 'Email cancelled. Nothing was sent.'); }
+        else emailFallback(files, subject, body, markSent);
+      });
+  } else emailFallback(files, subject, body, markSent);
+}
+
+function emailFallback(files, subject, body, markSent) {
+  const box = $('#fallback');
+  const links = files.map(f => `<a href="${URL.createObjectURL(f)}" download="${esc(f.name)}">${esc(f.name)}</a>`).join('');
+  const mailto = `mailto:${EMAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n(Files attached.)')}`;
+  box.hidden = false;
+  box.innerHTML = `This browser cannot attach files automatically.<br>1. Save each file: <span class="filelinks">${links}</span><br>
+    2. <a href="${mailto}">Open an email to ${esc(EMAIL_TO)}</a> and attach the saved files.<br>
+    3. <button class="link" data-action="mark-sent">I sent the email</button>`;
+  box._markSent = markSent;
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function showFallback(text) { const box = $('#fallback'); box.hidden = false; box.textContent = text; }
+
+/* ---------------------------------------------------------------- wiring */
+function init() {
+  $('#slots').innerHTML = SLOT_IDS.map(slotSkeleton).join('');
+  $('#mailto').textContent = EMAIL_TO;
+  const banners = [];
+  if (!navigator.bluetooth) banners.push(`<div class="banner err"><b>Bluetooth is not available in this browser.</b> On iPad, install the free app “Bluefy – Web BLE Browser” and open this page there.</div>`);
+  if (!window.isSecureContext) banners.push(`<div class="banner warn">This page must be opened from an https:// address for Bluetooth to work.</div>`);
+  try { localStorage.setItem('h10rr.test', '1'); localStorage.removeItem('h10rr.test'); }
+  catch (e) { banners.push(`<div class="banner warn">This browser does not allow saving data. Downloads will not be kept on the iPad; email them right away.</div>`); }
+  $('#banners').innerHTML = banners.join('');
+
+  document.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-action]');
+    if (!b || b.disabled) return;
+    const card = b.closest('[data-slot]');
+    const id = card ? card.getAttribute('data-slot') : null;
+    const action = b.getAttribute('data-action');
+    switch (action) {
+      case 'connect': actConnect(id); break;
+      case 'disconnect': { const c = C(id); if (c.device && c.device.gatt.connected) c.device.gatt.disconnect(); break; }
+      case 'start': actStart(id); break;
+      case 'stop': actStop(id); break;
+      case 'download': actDownload(id); break;
+      case 'clear': actClear(id); break;
+      case 'email-slot': {
+        const slot = S(id), c = C(id);
+        const keys = (c.connected && c.entries && c.entries.length ? c.entries.map(e => findSession(e.id, slot.sensorName)) : [slot.active ? findSession(slot.active.exerciseId, slot.sensorName) : null])
+          .filter(Boolean).map(s => s.key);
+        if (!keys.length && c.lastKey) keys.push(c.lastKey);
+        emailSessions(keys, id);
+        break;
+      }
+      case 'email-one': emailSessions([b.getAttribute('data-key')], null); break;
+      case 'email-unsent': emailSessions(Object.values(STATE.sessions).filter(s => !s.sentMs).map(s => s.key), null); break;
+      case 'delete-one': {
+        const key = b.getAttribute('data-key'), s = STATE.sessions[key];
+        if (!s) break;
+        ask('Delete from this iPad?', `${s.pid} (${s.slot})${s.sentMs ? '' : '\n\nThis recording has NOT been emailed yet.'}`, 'Delete', true).then(ok => {
+          if (!ok) return;
+          delete STATE.sessions[key]; ANALYSIS.delete(key); saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
+        });
+        break;
+      }
+      case 'unassign':
+        ask('Use another sensor?', `${id} will forget sensor ${sensorCode(S(id).sensorName)}. Next time you tap Connect you can pick another one.`, 'Forget sensor').then(ok => {
+          if (!ok) return;
+          S(id).sensorName = null; C(id).device = null; saveState(); updateSlot(id);
+        });
+        break;
+      case 'copy-address': copyText(EMAIL_TO); break;
+      case 'copy-log': copyText(LOG.join('\n')); break;
+      case 'email-log': {
+        const text = LOG.slice(-300).join('\n');
+        if (navigator.share) navigator.share({ title: 'H10 recorder log', text }).catch(() => {});
+        else location.href = `mailto:${EMAIL_TO}?subject=${encodeURIComponent('H10 recorder log')}&body=${encodeURIComponent(text.slice(-6000))}`;
+        break;
+      }
+      case 'mark-sent': { const box = $('#fallback'); if (box._markSent) box._markSent(); box.hidden = true; break; }
+    }
+  });
+  document.addEventListener('input', ev => {
+    const input = ev.target.closest('[data-f="pid"]');
+    if (!input) return;
+    const id = input.closest('[data-slot]').getAttribute('data-slot');
+    S(id).pid = sanitizePid(input.value);
+    saveState();
+    const startBtn = input.closest('.card').querySelector('[data-action="start"]');
+    if (startBtn) startBtn.disabled = C(id).busy || !S(id).pid;
+  });
+  document.addEventListener('focusout', ev => {
+    const input = ev.target.closest && ev.target.closest('[data-f="pid"]');
+    if (input) input.value = sanitizePid(input.value);
+  });
+  $('#debug').addEventListener('toggle', () => { if ($('#debug').open) $('#log').textContent = LOG.slice(-500).join('\n'); });
+
+  const tick = () => {
+    const now = Date.now();
+    $('#clock').textContent = fmtClock(now);
+    $('#clockDate').textContent = `${fmtDate(now)} · ${tzLabel(now)}`;
+  };
+  tick();
+  setInterval(() => {
+    tick();
+    for (const id of SLOT_IDS) {
+      const c = C(id), slot = S(id);
+      if ((c.connected && (c.recOn || c.hrAt)) || (slot.active && slot.active.stopMs == null)) {
+        if (document.activeElement && document.activeElement.closest && document.activeElement.closest(`[data-slot="${id}"]`)) continue;
+        updateSlot(id);
+      }
+    }
+  }, 1000);
+
+  SLOT_IDS.forEach(updateSlot);
+  renderSessions();
+  log('H10 RR Recorder', APP_VERSION, 'ready ·', navigator.userAgent);
+}
+
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(() => prompt('Copy:', text));
+  else prompt('Copy:', text);
+}
+
+window.addEventListener('error', ev => log('ERROR', ev.message, ev.filename + ':' + ev.lineno));
+window.addEventListener('unhandledrejection', ev => log('ERROR (promise)', errText(ev.reason)));
+window.H10RR = { PB, Polar, buildFrames, queryMessage, requestMessage, analyse, buildCsv, buildInfo, STATE: () => STATE };
+init();
+})();
+</script>
+</body>
+</html>
