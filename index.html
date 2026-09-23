@@ -102,13 +102,14 @@
   .events b { color: var(--text); font-weight: 600; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
   .choices button { min-height: 42px; }
+  button.startbtn { background: #0f3f86; border-color: #0f3f86; }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>H10 RR Recorder</h1>
-    <div class="sub">Polar H10 internal RR recordings · 4 sensors · v1.1</div>
+    <div class="sub">Polar H10 internal RR recordings · 4 sensors · v1.2</div>
   </div>
   <div class="clockbox">
     <div id="clock">--:--:--</div>
@@ -143,15 +144,13 @@
       <li>Tap <b>Connect</b>. Check that a heart rate appears and “skin contact ✓”.</li>
       <li>Type the participant ID and tap <b>Start recording</b>. The time is logged as the event “Start recording”.</li>
     </ol>
-    <h4>During the session: one tap per event</h4>
+    <h4>During the session: check first, then start</h4>
     <ol>
-      <li>At each change of phase tap the blue event button on the card (<b>Start TMS1</b>, <b>Start break1</b>, …). The time is saved at the moment you tap.</li>
-      <li>The app then checks the sensor by itself (about 10–15 s). You can go on with other work.</li>
-      <li><b>Green</b>: all OK, nothing to do.<br>
-          <b>Orange</b>: poor signal or could not connect. Adjust the strap (and check the iPad is within ~10 m), then tap <b>Check again</b>.<br>
-          <b>Red</b>: the recording had stopped. Adjust the strap, then tap <b>Check again</b>. The app saves what was recorded and starts a new part by itself.</li>
-      <li>Repeat <b>Check again</b> until the card is <b>green</b>. Only green means: recording and good contact.</li>
-      <li>Wrong button? Use <b>Undo last event</b>. Missed one? Use <b>Other event…</b> right away.</li>
+      <li>When the patient is seated (in the TMS chair, or in the waiting room for a break), tap <b>Check before …</b> (e.g. <b>Check before TMS1</b>). The app checks the sensor by itself (about 10–15 s).</li>
+      <li><b>Green</b>: all OK. <b>Orange</b>: poor signal or could not connect: adjust the strap (and check the iPad is within ~10 m), then tap <b>Check again</b>. <b>Red</b>: the recording had stopped: adjust the strap, then tap <b>Check again</b>; the app saves what was recorded and starts a new part by itself.</li>
+      <li>Repeat <b>Check again</b> until the card is <b>green</b>.</li>
+      <li>When the stimulation (or the break) starts, tap <b>Start …</b> (e.g. <b>Start TMS1</b>). This only saves the time: nothing happens with the sensor, and the patient does not need to move.</li>
+      <li>Wrong button? Use <b>Undo last event</b>. Missed a start? Use <b>Other event…</b> right away.</li>
     </ol>
     <h4>End (while the participant still wears the strap)</h4>
     <ol>
@@ -195,7 +194,7 @@
 'use strict';
 
 /* ---------------------------------------------------------------- settings */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const SLOT_IDS = ['H10-01', 'H10-02', 'H10-03', 'H10-04'];
 const STORE_KEY = 'h10rr.v1';
 const FRAME_SIZE = 20;           // RFC76 air packet size for writes (valid for any ATT MTU)
@@ -633,8 +632,15 @@ function analyse(sess) {
 }
 
 /* ------------------------------------------------------------- protocol */
-const PROTOCOL = (() => { const p = ['Start recording']; for (let i = 1; i <= 5; i++) p.push('Start TMS' + i, 'Start break' + i); p.push('Stop recording'); return p; })();
+const PROTOCOL = (() => {
+  const p = ['Start recording'];
+  for (let i = 1; i <= 5; i++) p.push('Check before TMS' + i, 'Start TMS' + i, 'Check before break' + i, 'Start break' + i);
+  p.push('Stop recording');
+  return p;
+})();
+const isCheckLabel = l => /^Check before /.test(l || '');
 function phaseOf(label) {
+  if (isCheckLabel(label)) return '';
   if (label === 'Start recording') return 'baseline';
   if (label === 'Stop recording') return 'after_stop';
   const m = /^Start (.+)$/.exec(label);
@@ -727,7 +733,7 @@ function analyseSeries(ser) {
     });
     prevEnd = p.end;
   }
-  const events = liveEvents(ser);
+  const events = liveEvents(ser).filter(e => !isCheckLabel(e.label));
   const lastPart = parts[parts.length - 1];
   const stopRef = ser.stopRefMs || (events.find(e => e.label === 'Stop recording') || {}).ms || null;
   const gaps = [];
@@ -821,7 +827,7 @@ function buildSeriesInfo(ser, A) {
   }
   L.push(`flagged_beats: ${A.nArt} of ${A.rows.length} (${A.artPct.toFixed(2)} %)`);
   L.push('');
-  L.push('events (iPad clock, logged when the button was tapped):');
+  L.push('events (iPad clock, logged when the button was tapped; “Check before …” events ran a sensor check, see checks below):');
   const evs = (ser.events || []).slice().sort((a, b) => a.ms - b.ms);
   if (!evs.length) L.push('  none (recorded without event buttons)');
   for (const e of evs) L.push(`  ${f(e.ms)}  ${e.label}${e.undone ? `  [undone at ${fmtClock(e.undoneMs)}]` : ''}${e.late ? '  [logged with “Other event”]' : ''}`);
@@ -838,12 +844,12 @@ function buildSeriesInfo(ser, A) {
   const checks = ser.checks || [];
   if (checks.length) {
     L.push('checks:');
-    for (const c of checks) L.push(`  ${fmtClock(c.ms)}  ${(c.reason || 'check').padEnd(16)} ${String(c.result).toUpperCase().padEnd(10)} ${c.note || ''}`);
+    for (const c of checks) L.push(`  ${fmtClock(c.ms)}  ${(c.reason || 'check').padEnd(20)} ${String(c.result).toUpperCase().padEnd(10)} ${c.note || ''}`);
     L.push('');
   }
   L.push('Columns of _RR.csv: part = recording part (a new part starts when the sensor had stopped by itself);');
   L.push('clock_time = part start (iPad clock) + cumulative RR intervals; each beat time is the end of its RR interval.');
-  L.push('phase = last event logged before the beat. gap_before_s = time without data before the first beat of a new part.');
+  L.push('phase = last “Start …” event logged before the beat (“Check before …” events do not change the phase). gap_before_s = time without data before the first beat of a new part.');
   L.push(`artifact = 1 if RR < ${ART_LOW} ms, RR > ${ART_HIGH} ms, or more than ${ART_REL * 100}% away from the median of the surrounding 11 beats`);
   L.push('(this also flags ectopic beats). Nothing is removed or corrected. The raw sensor files (_partN_raw.bpb) are included.');
   return L.join('\n') + '\n';
@@ -1161,9 +1167,9 @@ function updateSlot(id) {
   if (open) {
     const nxt = nextEvent(ser);
     const retryStop = liveEvents(ser).some(e => e.label === 'Stop recording');
-    const evBtn = btn('event', retryStop ? 'Stop recording (retry)' : esc(nxt), nxt === 'Stop recording' ? 'stop' : 'primary', false, ` data-label="${esc(nxt)}"`);
+    const evBtn = btn('event', retryStop ? 'Stop recording (retry)' : esc(nxt), nxt === 'Stop recording' ? 'stop' : (isCheckLabel(nxt) ? 'primary' : 'primary startbtn'), false, ` data-label="${esc(nxt)}"`);
     const chkBtn = btn('check', 'Check again', level === 'good' ? '' : (level === 'bad' ? 'stop' : 'warnbtn'), dis);
-    if (level === 'good') b.push(evBtn, chkBtn); else b.push(chkBtn, evBtn);
+    if (level === 'good' || isCheckLabel(nxt)) b.push(evBtn, chkBtn); else b.push(chkBtn, evBtn);
     b.push(btn('other-event', 'Other event…', 'small', false));
     if (liveEvents(ser).length > 1) b.push(btn('undo-event', 'Undo last event', 'small', dis));
     if (c.connected && !dis) b.push(btn('disconnect', 'Disconnect', 'small', dis));
@@ -1191,7 +1197,7 @@ function updateSlot(id) {
   if (ser) {
     const ev = liveEvents(ser);
     evEl.hidden = !ev.length;
-    setHTML(evEl, `Events: ${ev.slice(-4).map(e => `${esc(e.label.replace(/^Start /, ''))} <b>${fmtClock(e.ms)}</b>`).join(' · ')}${ev.length > 4 ? ` <span>(${ev.length} total)</span>` : ''}`);
+    setHTML(evEl, `Events: ${ev.slice(-4).map(e => `${esc(e.label.replace(/^Start /, '').replace(/^Check before /, 'check '))} <b>${fmtClock(e.ms)}</b>`).join(' · ')}${ev.length > 4 ? ` <span>(${ev.length} total)</span>` : ''}`);
   } else evEl.hidden = true;
 
   const m = f('msg');
@@ -1349,10 +1355,25 @@ function onEventTap(id, label, ms, late) {
       });
     return;
   }
-  const chooser = C(id).busy ? null : gestureChooser(id);
-  addEvent(id, label, ms, late ? { late: true } : null);
-  if (C(id).busy) { setMsg(id, 'info', `${label} logged at ${fmtClock(ms)}. A check is already running.`); return; }
-  runCheck(id, chooser, label);
+  if (isCheckLabel(label)) {
+    const chooser = C(id).busy ? null : gestureChooser(id);
+    addEvent(id, label, ms, late ? { late: true } : null);
+    if (C(id).busy) { setMsg(id, 'info', `A check is already running. Wait for its result.`); return; }
+    runCheck(id, chooser, label);
+    return;
+  }
+  // "Start …" only logs the time: no connection to the sensor, nothing to do with the strap.
+  const logStart = () => {
+    addEvent(id, label, ms, late ? { late: true } : null);
+    setMsg(id, 'ok', `${label} logged at ${fmtClock(ms)}.`);
+  };
+  const lastChk = (ser.checks || [])[ser.checks.length - 1];
+  if (!C(id).busy && checkLevel(lastChk) !== 'good') {
+    ask(`${label}: the last check was not green`, `${checkText(lastChk)}\n\nLog “${label}” anyway? (The time of your first tap, ${fmtClock(ms)}, is used.)`, `Log ${label}`, false)
+      .then(ok => { if (ok) logStart(); });
+    return;
+  }
+  logStart();
 }
 
 async function downloadEntries(id, opts) {
@@ -1623,7 +1644,7 @@ function init() {
       case 'other-event': {
         const ser = curSeries(id);
         if (!ser) break;
-        choose('Log another event', 'The time is taken when you tap the event.', PROTOCOL.slice(1), (label, ms) => onEventTap(id, label, ms, true));
+        choose('Log another event', 'The time is taken when you tap the event.', PROTOCOL.filter(l => !isCheckLabel(l) && l !== 'Start recording'), (label, ms) => onEventTap(id, label, ms, true));
         break;
       }
       case 'undo-event': {
