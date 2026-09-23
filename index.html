@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="author" content="MMP">
-<meta name="description" content="Start, stop and download Polar H10 internal RR recordings for up to four sensors.">
+<meta name="description" content="Record Polar H10 internal RR data for up to four sensors, log session events and check the sensors during the session.">
 <title>H10 RR Recorder</title>
 <style>
   :root {
@@ -90,13 +90,25 @@
   .modal-box h3 { margin: 0 0 8px; font-size: 19px; }
   .modal-box p { margin: 0 0 16px; white-space: pre-line; }
   .modal-box .actions { justify-content: flex-end; }
+  .card.st-good { border-color: var(--ok); box-shadow: 0 0 0 2px rgba(23, 115, 58, .16); }
+  .card.st-warn { border-color: #d08a00; box-shadow: 0 0 0 3px rgba(208, 138, 0, .25); }
+  .card.st-bad { border-color: var(--err); box-shadow: 0 0 0 3px rgba(179, 38, 30, .25); }
+  .status.good { background: var(--ok-bg); color: var(--ok); }
+  .status.warn { background: var(--warn-bg); color: var(--warn); }
+  .status.bad { background: var(--err-bg); color: var(--err); }
+  button.warnbtn { background: #d08a00; border-color: #d08a00; color: #fff; font-weight: 700; }
+  button.small { min-height: 38px; font-size: 14px; padding: 4px 12px; }
+  .events { font-size: 13px; color: var(--muted); }
+  .events b { color: var(--text); font-weight: 600; }
+  .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .choices button { min-height: 42px; }
 </style>
 </head>
 <body>
 <header>
   <div>
     <h1>H10 RR Recorder</h1>
-    <div class="sub">Polar H10 internal RR recordings · 4 sensors</div>
+    <div class="sub">Polar H10 internal RR recordings · 4 sensors · v1.1</div>
   </div>
   <div class="clockbox">
     <div id="clock">--:--:--</div>
@@ -110,12 +122,11 @@
 
   <section class="panel">
     <h2>Recordings saved on this iPad</h2>
-    <div class="mail">Data go to <code id="mailto"></code>
-      <button class="link" data-action="copy-address">Copy address</button>
-      <button id="sendAllBtn" data-action="email-unsent">Email all not yet sent</button>
+    <div class="mail">
+      <button id="saveAllBtn" data-action="save-unsaved">Save all not yet saved (one zip)</button>
     </div>
     <div class="tablewrap" id="sessions" style="margin-top:10px"></div>
-    <div id="fallback" class="msg warn" hidden style="margin-top:10px"></div>
+    <div id="savebox" class="msg" hidden style="margin-top:10px"></div>
   </section>
 
   <details id="help">
@@ -123,39 +134,45 @@
     <h4>Once, before the first session</h4>
     <ol>
       <li>Open this page in the free app <b>Bluefy – Web BLE Browser</b> (Safari cannot use Bluetooth). Bookmark it.</li>
-      <li>Label the four sensors H10-01 to H10-04. The first time you tap <b>Connect</b> on a card, pick the sensor whose ID (printed on the sensor) matches that label. The card remembers it.</li>
-      <li>Recommended: update each sensor to the latest Polar firmware (4.2.0 or later) with the Polar Flow app.</li>
-      <li>Use the <b>same iPad</b> to start and to download a given sensor. Newer Polar firmware only lets the device that started a recording read it.</li>
+      <li>Label the four sensors H10-01 to H10-04. The first time you connect a card, pick the sensor whose ID (printed on the sensor) matches that label. The card remembers it.</li>
+      <li>Use the <b>same iPad</b> for the whole session of a participant.</li>
     </ol>
     <h4>Start (per participant)</h4>
     <ol>
-      <li>Wet the electrodes, put the strap on the participant and clip the sensor on. The sensor only switches on when it touches skin.</li>
-      <li>On the participant's card tap <b>Connect</b>. Check that a heart rate appears and “skin contact ✓”.</li>
-      <li>Type the participant ID and tap <b>Start recording</b>. The iPad disconnects; the sensor keeps recording on its own, also far from the iPad.</li>
-      <li>Use the clock at the top of this page for the timing sheet.</li>
+      <li>Wet the electrodes (or use electrode gel), put the strap on and clip the sensor on.</li>
+      <li>Tap <b>Connect</b>. Check that a heart rate appears and “skin contact ✓”.</li>
+      <li>Type the participant ID and tap <b>Start recording</b>. The time is logged as the event “Start recording”.</li>
+    </ol>
+    <h4>During the session: one tap per event</h4>
+    <ol>
+      <li>At each change of phase tap the blue event button on the card (<b>Start TMS1</b>, <b>Start break1</b>, …). The time is saved at the moment you tap.</li>
+      <li>The app then checks the sensor by itself (about 10–15 s). You can go on with other work.</li>
+      <li><b>Green</b>: all OK, nothing to do.<br>
+          <b>Orange</b>: poor signal or could not connect. Adjust the strap (and check the iPad is within ~10 m), then tap <b>Check again</b>.<br>
+          <b>Red</b>: the recording had stopped. Adjust the strap, then tap <b>Check again</b>. The app saves what was recorded and starts a new part by itself.</li>
+      <li>Repeat <b>Check again</b> until the card is <b>green</b>. Only green means: recording and good contact.</li>
+      <li>Wrong button? Use <b>Undo last event</b>. Missed one? Use <b>Other event…</b> right away.</li>
     </ol>
     <h4>End (while the participant still wears the strap)</h4>
     <ol>
-      <li>Tap <b>Connect</b> → <b>Stop &amp; download</b>. Wait until “Downloaded” appears.</li>
-      <li>Tap <b>Email data</b> → choose Mail → send to the address shown above.</li>
+      <li>Tap <b>Stop recording</b> and confirm. Wait until “Stopped and saved” appears.</li>
+      <li>Tap <b>Save files</b>. One zip file with all data of this participant is saved (Downloads / Files app). Send it to Matias.</li>
       <li>Tap <b>Clear sensor memory</b>. Then remove the strap. The card is ready for the next participant.</li>
     </ol>
     <h4>Important</h4>
     <ul>
       <li>Do <b>not</b> unclip the sensor from the strap during a session: that stops the recording.</li>
-      <li>A copy of every download stays in the list above until you delete it, so you can email it again.</li>
+      <li>A copy of every recording stays in the list above until you delete it, so you can save it again.</li>
       <li>If a Bluetooth pairing request appears, tap <b>Pair</b>.</li>
-      <li>If Connect fails: make sure the strap is worn, close other apps that use the sensor (Polar Flow, Polar Beat, EphorPolar), and in iPad Settings → Bluetooth tap “Forget this device” for the Polar H10, then try again.</li>
+      <li>If the page was reloaded, the first tap on a card may ask you to pick the sensor again: pick the one with the matching ID.</li>
     </ul>
-    <h4>Pilot test (once)</h4>
-    <p>Record 15 minutes. Around minute 5, lift the strap off the skin for about one minute without unclipping the sensor. Stop, download and email the data. The info file shows whether the sensor reports the offline period.</p>
   </details>
 
   <details id="debug">
     <summary>Technical log</summary>
     <div class="actions" style="margin:10px 0">
       <button data-action="copy-log">Copy log</button>
-      <button data-action="email-log">Email log</button>
+      <button data-action="share-log">Share log</button>
     </div>
     <pre id="log"></pre>
   </details>
@@ -165,6 +182,7 @@
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="mTitle">
     <h3 id="mTitle"></h3>
     <p id="mText"></p>
+    <div class="choices" id="mChoices" hidden></div>
     <div class="actions">
       <button id="mCancel">Cancel</button>
       <button id="mOk" class="primary">OK</button>
@@ -177,8 +195,7 @@
 'use strict';
 
 /* ---------------------------------------------------------------- settings */
-const APP_VERSION = '1.0.0';
-const EMAIL_TO = 'matias.pulopulos@gmail.com';
+const APP_VERSION = '1.1.0';
 const SLOT_IDS = ['H10-01', 'H10-02', 'H10-03', 'H10-04'];
 const STORE_KEY = 'h10rr.v1';
 const FRAME_SIZE = 20;           // RFC76 air packet size for writes (valid for any ATT MTU)
@@ -257,8 +274,9 @@ function loadState() {
   try { s = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) { /* storage unavailable */ }
   s = (s && typeof s === 'object') ? s : {};
   s.slots = s.slots || {};
-  for (const id of SLOT_IDS) s.slots[id] = Object.assign({ sensorName: null, pid: '', active: null }, s.slots[id] || {});
+  for (const id of SLOT_IDS) s.slots[id] = Object.assign({ sensorName: null, pid: '', active: null, seriesKey: null }, s.slots[id] || {});
   s.sessions = s.sessions || {};
+  s.series = s.series || {};
   return s;
 }
 let STATE = loadState();
@@ -570,6 +588,7 @@ const H10 = {
   },
 };
 
+
 /* --------------------------------------------------------- analysis & files */
 const ANALYSIS = new Map();
 function analyse(sess) {
@@ -612,114 +631,272 @@ function analyse(sess) {
   ANALYSIS.set(sess.key, a);
   return a;
 }
-function qcShort(a) {
-  if (a.qc === 'ok') return `<span class="qc-ok">OK</span> (Δ ${a.diffS.toFixed(1)} s)`;
-  if (a.qc === 'check') return `<span class="qc-check">CHECK</span> (${a.diffS.toFixed(1)} s unexplained)`;
-  return 'not available';
+
+/* ------------------------------------------------------------- protocol */
+const PROTOCOL = (() => { const p = ['Start recording']; for (let i = 1; i <= 5; i++) p.push('Start TMS' + i, 'Start break' + i); p.push('Stop recording'); return p; })();
+function phaseOf(label) {
+  if (label === 'Start recording') return 'baseline';
+  if (label === 'Stop recording') return 'after_stop';
+  const m = /^Start (.+)$/.exec(label);
+  return m ? m[1] : label;
 }
-function baseName(sess) {
-  const t = sess.startMs != null ? sess.startMs : sess.downloadedMs;
-  const d = new Date(t);
-  return `${sess.pid || 'UNKNOWN'}_${sess.slot}_${fmtDate(t)}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+const ART_LOW = 300, ART_HIGH = 2000, ART_REL = 0.25;
+
+/* --------------------------------------------------------------- series */
+/* A series = one participant on one sensor for one session. It holds one or more
+   parts (separate H10 recordings; a new part starts when the sensor stopped by itself). */
+function curSeries(id) { const k = S(id).seriesKey; return k ? STATE.series[k] || null : null; }
+function seriesOpen(id) { const s = curSeries(id); return !!(s && !s.closedMs); }
+function liveEvents(ser) { return (ser.events || []).filter(e => !e.undone).sort((a, b) => a.ms - b.ms); }
+function nextEvent(ser) {
+  let idx = -1;
+  for (const e of liveEvents(ser)) { const i = PROTOCOL.indexOf(e.label); if (i > idx) idx = i; }
+  if (idx >= PROTOCOL.length - 1) return 'Stop recording'; // stop logged but not finished (retry)
+  return PROTOCOL[idx + 1];
 }
-function buildCsv(sess, a) {
-  const pid = sess.pid || '', sid = sensorCode(sess.sensorName);
-  const lines = [];
-  if (a.mode === 'hr') {
-    lines.push('participant_id,h10,sensor_id,sample,hr_bpm,time_s,clock_time,epoch_ms');
-    for (const r of a.rows) {
-      const abs = sess.startMs != null ? sess.startMs + r.t : null;
-      lines.push([pid, sess.slot, sid, r.beat, r.hr, (r.t / 1000).toFixed(3), abs != null ? fmtDateTime(abs, true) : '', abs != null ? Math.round(abs) : ''].join(','));
-    }
-  } else {
-    lines.push('participant_id,h10,sensor_id,beat,rr_ms,time_s,clock_time,epoch_ms,gap_before_s');
-    for (const r of a.rows) {
-      const abs = sess.startMs != null ? sess.startMs + r.t : null;
-      lines.push([pid, sess.slot, sid, r.beat, r.rr, (r.t / 1000).toFixed(3), abs != null ? fmtDateTime(abs, true) : '',
-                  abs != null ? Math.round(abs) : '', r.gapBefore ? (r.gapBefore / 1000).toFixed(3) : ''].join(','));
-    }
+function newSeries(id, pid) {
+  const t = Date.now(), slot = S(id);
+  const key = `${pid}|${sensorCode(slot.sensorName)}|${idStamp(t)}`;
+  STATE.series[key] = { key, pid, slot: id, sensorName: slot.sensorName, createdMs: t, events: [], checks: [], partStarts: [], partCount: 0,
+    closedMs: null, stopMs: null, stopRefMs: null, savedMs: null, appVersion: APP_VERSION };
+  return STATE.series[key];
+}
+function seriesParts(ser) {
+  if (ser.virtual) return STATE.sessions[ser.sessKey] ? [STATE.sessions[ser.sessKey]] : [];
+  return Object.values(STATE.sessions).filter(x => x.seriesKey === ser.key)
+    .sort((a, b) => ((a.part || 0) - (b.part || 0)) || ((a.startMs || 0) - (b.startMs || 0)));
+}
+function virtualSeries(sess) {
+  return { key: 'v:' + sess.key, virtual: true, sessKey: sess.key, pid: sess.pid, slot: sess.slot, sensorName: sess.sensorName,
+    createdMs: sess.startMs != null ? sess.startMs : sess.downloadedMs, events: [], checks: [], partStarts: [],
+    closedMs: sess.downloadedMs, stopMs: sess.stopMs, stopRefMs: sess.stopMs, savedMs: sess.sentMs || null };
+}
+function getSeries(key) {
+  if (key && key.startsWith('v:')) { const s = STATE.sessions[key.slice(2)]; return s ? virtualSeries(s) : null; }
+  return STATE.series[key] || null;
+}
+function allSeries() {
+  const out = Object.values(STATE.series).filter(s => seriesParts(s).length);
+  for (const sess of Object.values(STATE.sessions)) if (!sess.seriesKey || !STATE.series[sess.seriesKey]) out.push(virtualSeries(sess));
+  return out.sort((a, b) => b.createdMs - a.createdMs);
+}
+function markSaved(list) {
+  const t = Date.now();
+  for (const ser of list) { if (ser.virtual) { const s = STATE.sessions[ser.sessKey]; if (s) s.sentMs = t; } else ser.savedMs = t; }
+  saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
+}
+function isSaved(ser) { return ser.virtual ? !!(STATE.sessions[ser.sessKey] || {}).sentMs : !!ser.savedMs; }
+
+/* --------------------------------------------------------- series analysis */
+function median(arr) { if (!arr.length) return null; const s = arr.slice().sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function artifactFlags(rr) {
+  const out = new Array(rr.length);
+  for (let i = 0; i < rr.length; i++) {
+    const v = rr[i];
+    const med = median(rr.slice(Math.max(0, i - 5), Math.min(rr.length, i + 6)));
+    out[i] = v < ART_LOW || v > ART_HIGH || (med ? Math.abs(v - med) / med > ART_REL : false);
   }
-  return lines.join('\n') + '\n';
+  return out;
 }
-function buildInfo(sess, a) {
-  const L = [];
-  const clockAt = ms => (sess.startMs != null ? ` (${fmtDateTime(sess.startMs + ms, true)})` : '');
-  L.push('H10 RR recording - session information');
-  L.push('=======================================');
-  L.push(`participant_id: ${sess.pid || ''}`);
-  L.push(`h10_label: ${sess.slot}`);
-  L.push(`sensor: ${sess.sensorName || '?'}${sess.fw ? ' (firmware ' + sess.fw + ')' : ''}`);
-  L.push(`exercise_id_in_sensor: ${sess.exerciseId}`);
-  L.push(`timezone: ${tzLabel(sess.startMs != null ? sess.startMs : sess.downloadedMs)} (all clock times are local iPad time)`);
-  L.push('');
-  L.push(`recording_start: ${sess.startMs != null ? fmtDateTime(sess.startMs, true) : 'unknown'}`);
-  L.push(`start_time_source: ${sess.startSource || 'unknown'}`);
-  if (sess.startT0 != null && sess.startT1 != null) L.push(`start_command_round_trip_ms: ${sess.startT1 - sess.startT0}`);
-  L.push(`recording_stop: ${sess.stopMs != null ? fmtDateTime(sess.stopMs, true) : 'unknown (not stopped from this iPad)'}`);
-  L.push(`downloaded: ${fmtDateTime(sess.downloadedMs)}`);
-  L.push('');
-  if (a.mode === 'rr') {
-    L.push('data_type: RR intervals (ms), as stored by the H10');
-    L.push(`beats: ${a.rows.length}`);
-    L.push(`sum_of_rr_s: ${(a.sumRrMs / 1000).toFixed(3)} (${fmtDur(a.sumRrMs / 1000)})`);
-    L.push(`sensor_offline_periods_reported_by_h10: ${a.gaps.length}`);
-    a.gaps.forEach((g, i) => {
-      L.push(`  #${i + 1}: starts ${fmtOffset(g.startMs)} after start${clockAt(g.startMs)}, duration ${(g.durMs / 1000).toFixed(3)} s, ` +
-             (g.firstBeat ? `first beat after it: #${g.firstBeat}` : 'after the last beat'));
+const SER_ANALYSIS = new Map();
+function analyseSeries(ser) {
+  const parts0 = seriesParts(ser);
+  if (!parts0.length) return null;
+  const sig = ser.key + '|' + parts0.map(p => p.key + ':' + p.fileSize).join(',') + '|' + JSON.stringify(ser.events) + '|' + ser.stopRefMs;
+  const cached = SER_ANALYSIS.get(ser.key);
+  if (cached && cached.sig === sig) return cached;
+  const parts = parts0.map((sess, i) => {
+    const a = analyse(sess);
+    const start = sess.startMs != null ? sess.startMs : 0;
+    const lastBeat = start + a.endMs;
+    const ended = sess.stopMs == null;
+    return { sess, a, n: sess.part || (i + 1), start, lastBeat, end: ended ? lastBeat : sess.stopMs, ended };
+  });
+  const t0 = parts[0].start;
+  const rows = [];
+  let beat = 0, prevEnd = null;
+  for (const p of parts) {
+    if (p.a.mode !== 'rr') { prevEnd = p.end; continue; }
+    const rr = p.a.rows.map(r => r.rr);
+    const flags = artifactFlags(rr);
+    p.nBeats = rr.length; p.nArt = flags.filter(Boolean).length; p.nLong = rr.filter(v => v > ART_HIGH).length;
+    p.a.rows.forEach((r, i) => {
+      let gap = r.gapBefore ? r.gapBefore / 1000 : 0;
+      if (i === 0 && prevEnd != null) gap = (p.start - prevEnd) / 1000;
+      rows.push({ part: p.n, beat: ++beat, rr: r.rr, abs: p.start + r.t, art: flags[i], gap: (i === 0 && prevEnd != null) || r.gapBefore ? gap : null });
     });
-    L.push(`total_offline_s: ${(a.offlineTotalMs / 1000).toFixed(3)}`);
-  } else if (a.mode === 'hr') {
-    L.push(`data_type: heart rate (bpm) every ${(a.p.intervalMs || 1000) / 1000} s (this sensor recorded HR, not RR)`);
-    L.push(`samples: ${a.rows.length}`);
-    L.push(`heart_rate_offline_periods: ${a.p.hrOffline.map(o => `${o.start}-${o.stop}`).join(', ') || 'none'}`);
-  } else {
-    L.push('data_type: EMPTY - the file contains no RR or HR samples');
+    prevEnd = p.end;
   }
-  L.push(`reconstructed_duration_s: ${(a.endMs / 1000).toFixed(3)} (start to last sample, including offline periods)`);
-  L.push(`elapsed_start_to_stop_s: ${a.elapsedS != null ? a.elapsedS.toFixed(3) : 'unknown'}`);
-  if (a.qc === 'ok') L.push(`timing_check: OK - difference ${a.diffS.toFixed(2)} s (expected between ${QC_LOW_S} and +${QC_HIGH_S} s)`);
-  else if (a.qc === 'check') {
-    L.push(`timing_check: CHECK - ${a.diffS.toFixed(2)} s of the recording are not explained by the RR data and the offline periods reported by the sensor.`);
-    L.push('  clock_time values after an unreported gap would be early by up to this amount.');
-    L.push('  Possible causes: strap removed or sensor unclipped before Stop, or contact loss not reported by the H10.');
-  } else L.push('timing_check: not available (start or stop time unknown)');
-  L.push('');
-  L.push(`sensor_file_bytes: ${sess.fileSize}`);
-  if (sess.sensorCreated || sess.sensorModified) {
-    L.push(`sensor_file_created: ${sess.sensorCreated ? fmtUtc(sess.sensorCreated.utcMs) : 'n/a'} (sensor clock)`);
-    L.push(`sensor_file_modified: ${sess.sensorModified ? fmtUtc(sess.sensorModified.utcMs) : 'n/a'} (sensor clock)`);
+  const events = liveEvents(ser);
+  const lastPart = parts[parts.length - 1];
+  const stopRef = ser.stopRefMs || (events.find(e => e.label === 'Stop recording') || {}).ms || null;
+  const gaps = [];
+  for (let i = 1; i < parts.length; i++) {
+    gaps.push({ from: parts[i - 1].end, to: parts[i].start, why: `part ${parts[i - 1].n} ended by the sensor; part ${parts[i].n} started` });
   }
-  L.push(`other_fields: heart_rate_samples=${a.p.hr.length}, heart_rate_offline=${a.p.hrOffline.length}, pause_times=${a.p.pauseTimes}, unknown=${a.p.unknown.join(' ') || 'none'}`);
-  L.push('');
-  L.push('How clock_time is computed: recording_start + cumulative RR intervals, plus the duration of each');
-  L.push('offline period reported by the H10, inserted where it occurred. Each beat time is the end of its RR');
-  L.push('interval; uncertainty is about one beat. The raw sensor file (_raw.bpb) is included for re-analysis.');
-  L.push(`recorder_version: ${APP_VERSION}`);
+  if (lastPart.ended && stopRef && stopRef - lastPart.end > 3000) gaps.push({ from: lastPart.end, to: stopRef, why: `part ${lastPart.n} ended by the sensor before Stop`, tail: true });
+  gaps.forEach(g => { g.s = Math.max(0, (g.to - g.from) / 1000); });
+  // phase for each beat
+  let ei = -1;
+  for (const r of rows) {
+    while (ei + 1 < events.length && events[ei + 1].ms <= r.abs) ei++;
+    r.phase = ei >= 0 ? phaseOf(events[ei].label) : (events.length ? 'before_first_event' : '');
+  }
+  const phases = [];
+  const endRef = stopRef || lastPart.end;
+  events.forEach((e, i) => {
+    const ph = phaseOf(e.label);
+    if (ph === 'after_stop') return;
+    const start = e.ms, end = i + 1 < events.length ? events[i + 1].ms : endRef;
+    if (!(end > start)) return;
+    let covered = 0;
+    for (const p of parts) covered += Math.max(0, Math.min(end, p.end) - Math.max(start, p.start));
+    const inPh = rows.filter(r => r.abs >= start && r.abs < end);
+    phases.push({ phase: ph, start, end, durS: (end - start) / 1000, recS: covered / 1000, missS: Math.max(0, (end - start - covered) / 1000),
+      beats: inPh.length, art: inPh.filter(r => r.art).length });
+  });
+  const recordedS = parts.reduce((s, p) => s + Math.max(0, p.end - p.start), 0) / 1000;
+  const missingS = gaps.reduce((s, g) => s + g.s, 0);
+  const nArt = rows.filter(r => r.art).length;
+  const out = { sig, parts, rows, t0, events, gaps, phases, recordedS, missingS, nArt, artPct: rows.length ? 100 * nArt / rows.length : 0,
+    endedEarly: lastPart.ended && !!stopRef && gaps.some(g => g.tail), stopRef };
+  SER_ANALYSIS.set(ser.key, out);
+  return out;
+}
+
+/* ---------------------------------------------------------------- files */
+function seriesBase(ser, A) {
+  const t = A ? A.t0 : ser.createdMs, d = new Date(t);
+  return `${ser.pid || 'UNKNOWN'}_${ser.slot}_${fmtDate(t)}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+function buildSeriesCsv(ser, A) {
+  const sid = sensorCode(ser.sensorName);
+  const L = ['participant_id,h10,sensor_id,part,beat,rr_ms,time_s,clock_time,epoch_ms,phase,artifact,gap_before_s'];
+  for (const r of A.rows) {
+    L.push([ser.pid, ser.slot, sid, r.part, r.beat, r.rr, ((r.abs - A.t0) / 1000).toFixed(3), fmtDateTime(r.abs, true), Math.round(r.abs),
+      r.phase, r.art ? 1 : 0, r.gap != null ? r.gap.toFixed(3) : ''].join(','));
+  }
   return L.join('\n') + '\n';
 }
-function summaryLine(sess, a) {
-  const start = sess.startMs != null ? fmtClock(sess.startMs) : '?';
-  const stop = sess.stopMs != null ? fmtClock(sess.stopMs) : '?';
-  const n = a.mode === 'hr' ? `${a.rows.length} HR samples` : `${a.rows.length} beats`;
-  const qc = a.qc === 'ok' ? 'timing check OK' : (a.qc === 'check' ? `timing check: ${a.diffS.toFixed(1)} s unexplained` : 'timing check n/a');
-  return `${sess.pid} · ${sess.slot} (${sensorCode(sess.sensorName)}) · ${fmtDate(sess.startMs != null ? sess.startMs : sess.downloadedMs)} ${start}-${stop} · ${n} · offline periods: ${a.gaps.length} (${(a.offlineTotalMs / 1000).toFixed(1)} s) · ${qc}`;
+function buildEventsCsv(ser, A) {
+  const L = ['participant_id,h10,event,phase,clock_time,epoch_ms,time_s,status'];
+  const evs = (ser.events || []).slice().sort((a, b) => a.ms - b.ms);
+  for (const e of evs) {
+    L.push([ser.pid, ser.slot, e.label, phaseOf(e.label), fmtDateTime(e.ms, true), Math.round(e.ms), ((e.ms - A.t0) / 1000).toFixed(3),
+      e.undone ? 'undone' : 'ok'].join(','));
+  }
+  return L.join('\n') + '\n';
 }
-function buildFiles(sess) {
-  const a = analyse(sess), base = baseName(sess);
-  return {
-    a, base,
-    files: [
-      new File([buildCsv(sess, a)], `${base}_RR.csv`, { type: 'text/csv' }),
-      new File([buildInfo(sess, a)], `${base}_info.txt`, { type: 'text/plain' }),
-      new File([b64decode(sess.raw)], `${base}_raw.bpb`, { type: 'application/octet-stream' }),
-    ],
-  };
+function buildSeriesInfo(ser, A) {
+  const L = [];
+  const f = ms => (ms != null ? fmtDateTime(ms, true) : '?');
+  const first = A.parts[0].sess;
+  L.push('H10 RR recording - session information');
+  L.push('=======================================');
+  L.push(`participant_id: ${ser.pid || ''}`);
+  L.push(`h10_label: ${ser.slot}`);
+  L.push(`sensor: ${ser.sensorName || '?'}${first.fw ? ' (firmware ' + first.fw + ')' : ''}`);
+  L.push(`timezone: ${tzLabel(A.t0)} (all clock times are local iPad time)`);
+  L.push(`recorder_version: ${APP_VERSION}`);
+  L.push('');
+  L.push(`recording_start: ${f(A.t0)}`);
+  if (ser.stopMs) L.push(`recording_stop: ${f(ser.stopMs)} (stopped from the iPad)`);
+  else if (A.stopRef) L.push(`recording_stop: the sensor had already stopped by itself; Stop was tapped at ${f(A.stopRef)}`);
+  else L.push('recording_stop: unknown (not stopped from this iPad)');
+  L.push(`parts: ${A.parts.length}`);
+  for (const p of A.parts) {
+    const qc = p.ended ? 'n/a (ended by the sensor)' : (p.a.qc === 'ok' ? `OK (${p.a.diffS.toFixed(2)} s)` : (p.a.qc === 'check' ? `CHECK (${p.a.diffS.toFixed(2)} s unexplained)` : 'n/a'));
+    L.push(`  part ${p.n}: id ${p.sess.exerciseId}`);
+    L.push(`    start ${f(p.start)} (${p.sess.startSource || '?'})`);
+    L.push(`    end   ${f(p.end)} ${p.ended ? '(ended by the sensor; time of the last beat)' : '(stopped from the iPad)'}`);
+    L.push(`    ${p.nBeats != null ? p.nBeats : p.a.rows.length} beats, ${fmtDur((p.end - p.start) / 1000)}, RR > 2 s: ${p.nLong || 0}, flagged beats: ${p.nArt || 0}, timing check: ${qc}`);
+  }
+  L.push('');
+  L.push(`recorded_s: ${A.recordedS.toFixed(1)} (${fmtDur(A.recordedS)})`);
+  L.push(`missing_s: ${A.missingS.toFixed(1)} (${fmtDur(A.missingS)})`);
+  if (!A.gaps.length) L.push('missing_periods: none');
+  else {
+    L.push('missing_periods:');
+    for (const g of A.gaps) L.push(`  ${f(g.from)} -> ${f(g.to)}: ${fmtDur(g.s)} (${g.why})`);
+  }
+  L.push(`flagged_beats: ${A.nArt} of ${A.rows.length} (${A.artPct.toFixed(2)} %)`);
+  L.push('');
+  L.push('events (iPad clock, logged when the button was tapped):');
+  const evs = (ser.events || []).slice().sort((a, b) => a.ms - b.ms);
+  if (!evs.length) L.push('  none (recorded without event buttons)');
+  for (const e of evs) L.push(`  ${f(e.ms)}  ${e.label}${e.undone ? `  [undone at ${fmtClock(e.undoneMs)}]` : ''}${e.late ? '  [logged with “Other event”]' : ''}`);
+  L.push('');
+  if (A.phases.length) {
+    L.push('phases:');
+    L.push('  ' + ['phase', 'start', 'end', 'duration', 'recorded', 'missing', 'beats', 'flagged'].map((h, i) => h.padEnd([12, 10, 10, 13, 13, 13, 7, 8][i])).join(''));
+    for (const p of A.phases) {
+      L.push('  ' + [p.phase, fmtClock(p.start), fmtClock(p.end), fmtDur(p.durS), fmtDur(p.recS), fmtDur(p.missS), String(p.beats),
+        p.beats ? (100 * p.art / p.beats).toFixed(1) + ' %' : '-'].map((v, i) => v.padEnd([12, 10, 10, 13, 13, 13, 7, 8][i])).join(''));
+    }
+    L.push('');
+  }
+  const checks = ser.checks || [];
+  if (checks.length) {
+    L.push('checks:');
+    for (const c of checks) L.push(`  ${fmtClock(c.ms)}  ${(c.reason || 'check').padEnd(16)} ${String(c.result).toUpperCase().padEnd(10)} ${c.note || ''}`);
+    L.push('');
+  }
+  L.push('Columns of _RR.csv: part = recording part (a new part starts when the sensor had stopped by itself);');
+  L.push('clock_time = part start (iPad clock) + cumulative RR intervals; each beat time is the end of its RR interval.');
+  L.push('phase = last event logged before the beat. gap_before_s = time without data before the first beat of a new part.');
+  L.push(`artifact = 1 if RR < ${ART_LOW} ms, RR > ${ART_HIGH} ms, or more than ${ART_REL * 100}% away from the median of the surrounding 11 beats`);
+  L.push('(this also flags ectopic beats). Nothing is removed or corrected. The raw sensor files (_partN_raw.bpb) are included.');
+  return L.join('\n') + '\n';
+}
+function buildSeriesFiles(ser) {
+  const A = analyseSeries(ser);
+  if (!A) throw new Error('No data downloaded for ' + ser.pid);
+  const base = seriesBase(ser, A), enc = new TextEncoder();
+  const files = [
+    { name: `${base}_RR.csv`, data: enc.encode(buildSeriesCsv(ser, A)) },
+    { name: `${base}_events.csv`, data: enc.encode(buildEventsCsv(ser, A)) },
+    { name: `${base}_info.txt`, data: enc.encode(buildSeriesInfo(ser, A)) },
+  ];
+  for (const p of A.parts) files.push({ name: `${base}_part${p.n}_raw.bpb`, data: b64decode(p.sess.raw) });
+  return { A, base, files };
+}
+
+/* ------------------------------------------------------------------ zip */
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files, ms) {
+  const enc = new TextEncoder(), d = new Date(ms);
+  const dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  const chunks = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+    const lh = new Uint8Array(30 + name.length), lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0x0800, true); lv.setUint16(8, 0, true);
+    lv.setUint16(10, dosTime, true); lv.setUint16(12, dosDate, true); lv.setUint32(14, crc, true);
+    lv.setUint32(18, data.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, name.length, true); lv.setUint16(28, 0, true);
+    lh.set(name, 30);
+    const ch = new Uint8Array(46 + name.length), cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(8, 0x0800, true); cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true); cv.setUint16(14, dosDate, true); cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, name.length, true);
+    cv.setUint32(42, offset, true);
+    ch.set(name, 46);
+    chunks.push(lh, data); central.push(ch);
+    offset += lh.length + data.length;
+  }
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new Uint8Array(22), ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true);
+  return new Blob([...chunks, ...central, end], { type: 'application/zip' });
 }
 
 /* ------------------------------------------------------------ connection ctx */
 const CTX = {};
 for (const id of SLOT_IDS) CTX[id] = { device: null, psftp: null, connected: false, busy: false, busyText: '', battery: null, fw: '',
-  hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, msg: null, lastKey: null, listening: false };
+  hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, msg: null, lastKey: null, sig: null };
 const C = id => CTX[id];
 
 function findSession(exerciseId, sensorName) {
@@ -727,204 +904,77 @@ function findSession(exerciseId, sensorName) {
 }
 function activeMatches(slot, id) { return !!(slot.active && (slot.active.exerciseId === id || slot.active.sensorId === id)); }
 
-/* --------------------------------------------------------------------- UI */
-function setMsg(id, type, text) { C(id).msg = text ? { type, text } : null; updateSlot(id); }
-function setBusy(id, text) { const c = C(id); c.busy = !!text; c.busyText = text || ''; updateSlot(id); }
-
-function slotSkeleton(id) {
-  return `<div class="card" data-slot="${id}">
-    <div class="card-head"><span class="slot-name">${id}</span><span class="conn" data-f="conn"></span></div>
-    <div class="meta" data-f="meta"></div>
-    <div class="meta" data-f="hr"></div>
-    <label class="pid">Participant ID <input type="text" data-f="pid" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="16" placeholder="e.g. P001"></label>
-    <div class="status" data-f="status"></div>
-    <div class="actions" data-f="actions"></div>
-    <div class="msg" data-f="msg" hidden></div>
-    <div class="summary" data-f="summary" hidden></div>
-  </div>`;
-}
-function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
-function btn(action, label, cls, disabled) { return `<button data-action="${action}"${cls ? ` class="${cls}"` : ''}${disabled ? ' disabled' : ''}>${label}</button>`; }
-
-function slotStartMs(id) {
-  const slot = S(id), c = C(id);
-  if (slot.active && (!c.connected || !c.recId || activeMatches(slot, c.recId))) return slot.active.startMs;
-  return parseIdStamp(c.recId);
-}
-
-function updateSlot(id) {
-  const card = document.querySelector(`[data-slot="${id}"]`);
-  if (!card) return;
-  const slot = S(id), c = C(id), now = Date.now();
-  const f = name => card.querySelector(`[data-f="${name}"]`);
-
-  const conn = f('conn');
-  conn.textContent = c.busy ? 'Working…' : (c.connected ? '● Connected' : '○ Not connected');
-  conn.className = 'conn' + (c.connected ? ' on' : '');
-
-  const meta = [];
-  meta.push(slot.sensorName ? `Sensor <b>${esc(sensorCode(slot.sensorName))}</b>` : 'No sensor assigned yet');
-  if (c.connected && c.battery != null) meta.push(`battery ${c.battery}%`);
-  if (c.connected && c.fw) meta.push(`firmware ${esc(c.fw)}${cmpVersion(c.fw, '4.2.0') < 0 ? ' <b style="color:var(--warn)">(update recommended)</b>' : ''}`);
-  if (!c.connected && slot.sensorName && !slot.active && !c.busy) meta.push(`<button class="link" data-action="unassign">use another sensor</button>`);
-  setHTML(f('meta'), meta.join(' · '));
-
-  const hrEl = f('hr');
-  if (c.connected && c.hr != null && now - c.hrAt < 5000) {
-    setHTML(hrEl, `Live heart rate <b>${c.hr} bpm</b>` + (c.contact === true ? ' · skin contact ✓' : (c.contact === false ? ' · <b style="color:var(--err)">no skin contact</b>' : '')));
-  } else if (c.connected) {
-    setHTML(hrEl, 'Live heart rate: waiting… (strap worn and electrodes wet?)');
-  } else setHTML(hrEl, '');
-
-  const input = f('pid');
-  const recordingLocal = !!(slot.active && slot.active.stopMs == null);
-  const lockPid = recordingLocal || (c.connected && c.recOn);
-  if (document.activeElement !== input) input.value = lockPid && slot.active ? slot.active.pid : (slot.pid || '');
-  input.disabled = lockPid || c.busy;
-
-  // status line
-  const st = f('status');
-  let cls = '', html = '';
-  if (c.busy) { html = esc(c.busyText); }
-  else if (c.connected && c.recOn) {
-    const t = slotStartMs(id);
-    cls = 'rec';
-    html = `● RECORDING${t ? ' since ' + fmtClock(t) : ''}<small>${t ? 'elapsed ' + fmtDur((now - t) / 1000) + ' · ' : ''}ID ${esc(c.recId)}</small>`;
-  } else if (c.connected && c.entries && c.entries.length) {
-    const e = c.entries[0], sess = findSession(e.id, slot.sensorName);
-    cls = 'mem';
-    html = `Sensor memory holds recording ${esc(e.id)}<small>${sess ? 'downloaded ✓' + (sess.sentMs ? ' · emailed ✓' : ' · not emailed yet') : 'not downloaded yet'}</small>`;
-  } else if (c.connected && c.entries) {
-    cls = 'ready'; html = 'Ready · sensor memory empty';
-  } else if (c.connected) {
-    html = 'Connected';
-  } else if (recordingLocal) {
-    cls = 'rec';
-    html = `● RECORDING since ${fmtClock(slot.active.startMs)}<small>elapsed ${fmtDur((now - slot.active.startMs) / 1000)} · participant ${esc(slot.active.pid)} · connect to stop</small>`;
-  } else if (slot.active && slot.active.stopMs != null) {
-    const sess = findSession(slot.active.exerciseId, slot.sensorName);
-    cls = 'mem';
-    html = `Stopped at ${fmtClock(slot.active.stopMs)}<small>${sess ? 'downloaded ✓' + (sess.sentMs ? ' · emailed ✓' : ' · not emailed yet') + ' · sensor memory not cleared yet' : 'not downloaded yet · connect to download'}</small>`;
-  } else {
-    html = 'Not connected';
-  }
-  st.className = 'status' + (cls ? ' ' + cls : '');
-  setHTML(st, html);
-  card.classList.toggle('recording', cls === 'rec');
-
-  // actions
-  const b = [], dis = c.busy;
-  if (!c.connected) {
-    b.push(btn('connect', 'Connect', 'primary', dis));
-    const sess = slot.active ? findSession(slot.active.exerciseId, slot.sensorName) : null;
-    if (sess) b.push(btn('email-slot', 'Email data', '', dis));
-  } else if (c.recOn) {
-    b.push(btn('stop', 'Stop &amp; download', 'stop', dis));
-    b.push(btn('disconnect', 'Disconnect', '', dis));
-  } else if (c.entries && c.entries.length) {
-    const downloaded = c.entries.every(e => findSession(e.id, slot.sensorName));
-    if (downloaded) { b.push(btn('email-slot', 'Email data', 'primary', dis)); b.push(btn('download', 'Download again', '', dis)); }
-    else b.push(btn('download', 'Download', 'primary', dis));
-    b.push(btn('clear', 'Clear sensor memory', 'danger', dis));
-    b.push(btn('disconnect', 'Disconnect', '', dis));
-  } else if (c.entries) {
-    b.push(btn('start', 'Start recording', 'primary', dis || !sanitizePid(input.value)));
-    b.push(btn('disconnect', 'Disconnect', '', dis));
-  } else {
-    b.push(btn('disconnect', 'Disconnect', '', dis));
-  }
-  setHTML(f('actions'), b.join(''));
-
-  const m = f('msg');
-  if (c.msg) { m.hidden = false; m.className = 'msg ' + c.msg.type; m.textContent = c.msg.text; } else m.hidden = true;
-
-  const sumEl = f('summary');
-  const key = c.lastKey || (slot.active ? (findSession(slot.active.exerciseId, slot.sensorName) || {}).key : null);
-  const sess = key ? STATE.sessions[key] : null;
-  if (sess) {
-    const a = analyse(sess);
-    sumEl.hidden = false;
-    setHTML(sumEl, `Last download: <b>${esc(sess.pid)}</b> · ${a.mode === 'hr' ? a.rows.length + ' HR samples' : a.rows.length + ' beats'} · ${fmtDur(a.endMs / 1000)} · offline periods reported by sensor: <b>${a.gaps.length}</b>${a.gaps.length ? ' (' + (a.offlineTotalMs / 1000).toFixed(1) + ' s)' : ''} · timing check: ${qcShort(a)}`);
-  } else sumEl.hidden = true;
-}
-
-function renderSessions() {
-  const list = Object.values(STATE.sessions).sort((x, y) => y.downloadedMs - x.downloadedMs);
-  const box = $('#sessions');
-  $('#sendAllBtn').disabled = !list.some(s => !s.sentMs);
-  if (!list.length) { box.innerHTML = '<div class="meta">No recordings downloaded on this iPad yet.</div>'; return; }
-  const rows = list.map(s => {
-    let a; try { a = analyse(s); } catch (e) { a = null; }
-    return `<tr>
-      <td><b>${esc(s.pid)}</b></td><td>${esc(s.slot)}</td>
-      <td>${s.startMs != null ? fmtDate(s.startMs) + ' ' + fmtClock(s.startMs) : '?'}</td>
-      <td>${a ? fmtDur(a.endMs / 1000) : '?'}</td>
-      <td>${a ? (a.mode === 'hr' ? a.rows.length + ' HR' : a.rows.length) : '?'}</td>
-      <td>${a ? a.gaps.length : '?'}</td>
-      <td>${a ? qcShort(a) : '<span class="qc-check">file error</span>'}</td>
-      <td>${s.sentMs ? 'emailed ' + fmtClock(s.sentMs) : '<b>not yet</b>'}</td>
-      <td><div class="actions">${btn('email-one', 'Email', '', false).replace('<button', `<button data-key="${esc(s.key)}"`)}${btn('delete-one', 'Delete', 'danger', false).replace('<button', `<button data-key="${esc(s.key)}"`)}</div></td>
-    </tr>`;
-  }).join('');
-  box.innerHTML = `<table><thead><tr><th>Participant</th><th>H10</th><th>Start</th><th>Duration</th><th>Beats</th><th>Offline</th><th>Timing check</th><th>Email</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
-function ask(title, text, okLabel, danger) {
+/* ----------------------------------------------------------------- modals */
+function ask(title, text, okLabel, danger, onOkSync) {
   return new Promise(resolve => {
     const modal = $('#modal');
     $('#mTitle').textContent = title;
     $('#mText').textContent = text;
+    $('#mChoices').hidden = true; $('#mChoices').innerHTML = '';
     const ok = $('#mOk'), cancel = $('#mCancel');
+    ok.hidden = false;
     ok.textContent = okLabel || 'OK';
     ok.className = danger ? 'stop' : 'primary';
     modal.hidden = false;
     const done = v => { modal.hidden = true; ok.onclick = cancel.onclick = null; resolve(v); };
-    ok.onclick = () => done(true);
+    ok.onclick = () => { if (onOkSync) { try { onOkSync(); } catch (e) { log('ERROR', errText(e)); } } done(true); };
     cancel.onclick = () => done(false);
   });
 }
+function choose(title, text, labels, onPick) {
+  const modal = $('#modal'), box = $('#mChoices');
+  $('#mTitle').textContent = title;
+  $('#mText').textContent = text;
+  box.innerHTML = labels.map(l => `<button data-choice="${esc(l)}">${esc(l)}</button>`).join('');
+  box.hidden = false;
+  $('#mOk').hidden = true;
+  modal.hidden = false;
+  const close = () => { modal.hidden = true; box.onclick = null; $('#mCancel').onclick = null; box.hidden = true; };
+  box.onclick = ev => { const b = ev.target.closest('[data-choice]'); if (!b) return; close(); onPick(b.getAttribute('data-choice'), Date.now()); };
+  $('#mCancel').onclick = close;
+}
 
-/* ---------------------------------------------------------------- actions */
-async function actConnect(id) {
+/* ------------------------------------------------------------- bluetooth */
+function gestureChooser(id) {
   const c = C(id), slot = S(id);
-  if (!navigator.bluetooth) { setMsg(id, 'err', 'This browser cannot use Bluetooth. On iPad, open this page in the Bluefy app.'); return; }
-  let device = c.device;
-  let chooser = null;
+  if (c.device || !navigator.bluetooth) return null;
+  const filters = slot.sensorName ? [{ name: slot.sensorName }] : [{ namePrefix: 'Polar H10' }];
+  const p = navigator.bluetooth.requestDevice({ filters, optionalServices: [UUIDS.psftp, 'battery_service', 'device_information', 'heart_rate'] });
+  p.catch(() => {});
+  return p;
+}
+async function ensureConnected(id, chooser) {
+  const c = C(id), slot = S(id);
+  if (c.connected && c.psftp && c.device && c.device.gatt.connected) return;
+  if (!navigator.bluetooth) throw new Error('This browser cannot use Bluetooth. On iPad, open this page in the Bluefy app.');
+  let device = c.device, picked = false;
   if (!device) {
-    // must be called directly from the tap
-    const filters = slot.sensorName ? [{ name: slot.sensorName }] : [{ namePrefix: 'Polar H10' }];
-    chooser = navigator.bluetooth.requestDevice({ filters, optionalServices: [UUIDS.psftp, 'battery_service', 'device_information', 'heart_rate'] });
+    if (!chooser) throw new Error('The sensor has not been selected on this page yet. Tap again and pick the sensor.');
+    try { device = await chooser; }
+    catch (e) { if (e && e.name === 'NotFoundError') throw new Error('No sensor selected.'); throw e; }
+    const other = SLOT_IDS.find(o => o !== id && S(o).sensorName === device.name);
+    if (other) throw new Error(`Sensor ${sensorCode(device.name)} is already assigned to ${other}. Pick the sensor labelled ${id}.`);
+    c.device = device; picked = true;
   }
-  setMsg(id, null);
-  setBusy(id, 'Connecting…');
+  if (!device._h10Listener) {
+    device._h10Listener = true;
+    device.addEventListener('gattserverdisconnected', () => onDisconnected(id, device));
+  }
   try {
-    if (chooser) {
-      device = await chooser;
-      const other = SLOT_IDS.find(o => o !== id && S(o).sensorName === device.name);
-      if (other) throw new Error(`Sensor ${sensorCode(device.name)} is already assigned to ${other}. Pick the sensor labelled ${id}.`);
-      c.device = device;
-    }
-    if (!device._h10Listener) {
-      device._h10Listener = true;
-      device.addEventListener('gattserverdisconnected', () => onDisconnected(id, device));
-    }
-    await withTimeout(device.gatt.connect(), 20000, 'Could not connect. Is the strap worn (wet electrodes) and the sensor close to the iPad?');
+    await withTimeout(device.gatt.connect(), 20000, 'Could not connect to the sensor. Is the strap on with wet electrodes, and the iPad within about 10 m?');
     log(id, 'connected to', device.name);
     await setupLink(id);
     if (!slot.sensorName) { slot.sensorName = device.name; saveState(); }
-    setBusy(id, 'Reading sensor status…');
-    await refresh(id);
-    if (c.recOn) setMsg(id, 'info', 'The sensor is recording. Tap “Stop & download” at the end of the session.');
-    else if (c.entries && c.entries.length) setMsg(id, 'warn', 'The sensor memory still holds a recording. Download it, email it, then clear the memory.');
-    else setMsg(id, 'ok', 'Ready. Check the live heart rate, type the participant ID and tap “Start recording”.');
   } catch (e) {
-    log(id, 'connect failed:', errText(e));
-    if (e && e.name === 'NotFoundError') setMsg(id, 'info', 'No sensor selected.');
-    else setMsg(id, 'err', errText(e));
-    if (!c.connected) { c.device = null; try { device && device.gatt && device.gatt.connected && device.gatt.disconnect(); } catch (_) { /* ignore */ } }
-  } finally { setBusy(id, null); renderSessions(); }
+    try { if (device.gatt.connected) device.gatt.disconnect(); } catch (_) { /* ignore */ }
+    if (picked && !slot.sensorName) c.device = null;
+    throw e;
+  }
 }
-
+function disconnectLink(id) {
+  const c = C(id);
+  try { if (c.device && c.device.gatt.connected) c.device.gatt.disconnect(); } catch (e) { /* ignore */ }
+}
 async function setupLink(id) {
   const c = C(id), gatt = c.device.gatt;
   const svc = await gatt.getPrimaryService(UUIDS.psftp);
@@ -944,8 +994,10 @@ async function setupLink(id) {
   }
   if (lastErr) throw lastErr;
   if (d2h) {
-    try { d2h.addEventListener('characteristicvaluechanged', ev => { const v = ev.target.value; log(id, 'sensor notification', hex(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))); }); await d2h.startNotifications(); }
-    catch (e) { log(id, 'notification channel not available:', errText(e)); }
+    try {
+      if (!d2h._h10) { d2h._h10 = true; d2h.addEventListener('characteristicvaluechanged', ev => { const v = ev.target.value; log(id, 'sensor notification', hex(new Uint8Array(v.buffer, v.byteOffset, v.byteLength))); }); }
+      await d2h.startNotifications();
+    } catch (e) { log(id, 'notification channel not available:', errText(e)); }
   }
   c.connected = true;
   try { const bs = await gatt.getPrimaryService('battery_service'); const bl = await bs.getCharacteristic('battery_level'); c.battery = (await bl.readValue()).getUint8(0); } catch (e) { log(id, 'battery level n/a'); }
@@ -953,30 +1005,249 @@ async function setupLink(id) {
   try {
     const hs = await gatt.getPrimaryService('heart_rate');
     const hc = await hs.getCharacteristic('heart_rate_measurement');
-    hc.addEventListener('characteristicvaluechanged', ev => onHr(id, ev));
+    if (!hc._h10) { hc._h10 = true; hc.addEventListener('characteristicvaluechanged', ev => onHr(id, ev)); }
     await hc.startNotifications();
   } catch (e) { log(id, 'live heart rate n/a:', errText(e)); }
   updateSlot(id);
 }
-
 function onHr(id, ev) {
   const c = C(id), dv = ev.target.value;
   if (!dv || dv.byteLength < 2) return;
   const flags = dv.getUint8(0);
-  c.hr = (flags & 1) ? dv.getUint16(1, true) : dv.getUint8(1);
+  let o;
+  if (flags & 1) { c.hr = dv.getUint16(1, true); o = 3; } else { c.hr = dv.getUint8(1); o = 2; }
   c.contact = (flags & 0x04) ? !!(flags & 0x02) : null;
+  if (flags & 0x08) o += 2;
+  const rrs = [];
+  if (flags & 0x10) for (; o + 1 < dv.byteLength; o += 2) rrs.push(Math.round(dv.getUint16(o, true) * 1000 / 1024));
+  if (c.sig) { c.sig.n++; c.sig.hr.push(c.hr); c.sig.contact.push(c.contact); c.sig.rr.push(...rrs); }
   const first = !c.hrAt || Date.now() - c.hrAt > 5000;
   c.hrAt = Date.now();
   if (first) updateSlot(id);
 }
+/* Live signal check from the standard heart-rate stream (does not touch the internal recording). */
+async function sampleSignal(id, maxMs = 10000) {
+  const c = C(id);
+  c.sig = { n: 0, hr: [], contact: [], rr: [] };
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    await sleep(500);
+    if (!c.connected) break;
+    if (Date.now() - t0 >= 5000 && c.sig.rr.length >= 8) break;
+  }
+  const s = c.sig; c.sig = null;
+  if (!s || !s.n) return { good: false, reason: 'no heart signal from the sensor', hr: null };
+  const hr = Math.round(median(s.hr));
+  const known = s.contact.filter(x => x !== null);
+  if (known.length && known.filter(Boolean).length / known.length < 0.8) return { good: false, reason: 'no skin contact', hr };
+  if (s.rr.length < 4) return { good: false, reason: 'too few heartbeats detected', hr };
+  const med = median(s.rr);
+  const bad = s.rr.filter(v => v < ART_LOW || v > ART_HIGH || Math.abs(v - med) / med > 0.3).length;
+  if (bad / s.rr.length > 0.2) return { good: false, reason: 'noisy signal', hr };
+  return { good: true, reason: '', hr };
+}
+const IMPL = { ensureConnected, disconnectLink, sampleSignal };
 
 function onDisconnected(id, device) {
   const c = C(id);
   if (c.device !== device) return;
   log(id, 'disconnected');
   if (c.psftp) c.psftp.detach();
-  Object.assign(c, { psftp: null, connected: false, hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, battery: null });
+  Object.assign(c, { psftp: null, connected: false, hr: null, contact: null, hrAt: 0, recOn: null, recId: '', entries: null, battery: null, sig: null });
   updateSlot(id);
+}
+
+/* --------------------------------------------------------------------- UI */
+function setMsg(id, type, text) { C(id).msg = text ? { type, text } : null; updateSlot(id); }
+function setBusy(id, text) { const c = C(id); c.busy = !!text; c.busyText = text || ''; updateSlot(id); }
+
+function slotSkeleton(id) {
+  return `<div class="card" data-slot="${id}">
+    <div class="card-head"><span class="slot-name">${id}</span><span class="conn" data-f="conn"></span></div>
+    <div class="meta" data-f="meta"></div>
+    <div class="meta" data-f="hr"></div>
+    <label class="pid">Participant ID <input type="text" data-f="pid" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="16" placeholder="e.g. P001"></label>
+    <div class="status" data-f="status"></div>
+    <div class="actions" data-f="actions"></div>
+    <div class="events" data-f="events" hidden></div>
+    <div class="msg" data-f="msg" hidden></div>
+    <div class="summary" data-f="summary" hidden></div>
+  </div>`;
+}
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+function btn(action, label, cls, disabled, extra) { return `<button data-action="${action}"${cls ? ` class="${cls}"` : ''}${disabled ? ' disabled' : ''}${extra || ''}>${label}</button>`; }
+
+function checkLevel(chk) {
+  if (!chk) return 'good';
+  if (chk.result === 'ok' || chk.result === 'restarted') return 'good';
+  if (chk.result === 'stopped') return 'bad';
+  return 'warn';
+}
+function checkText(chk) {
+  if (!chk) return '';
+  const t = fmtClock(chk.ms);
+  switch (chk.result) {
+    case 'ok': return `✓ Last check ${t}: OK${chk.hr ? ' · ' + chk.hr + ' bpm' : ''}`;
+    case 'restarted': return `✓ Check ${t}: ${chk.note}`;
+    case 'adjust': return `⚠ Signal poor at ${t} (${chk.reason2 || chk.note}). Adjust the strap, then tap “Check again”.`;
+    case 'stopped': return `✖ The recording had stopped${chk.stoppedAt ? ' at ' + fmtClock(chk.stoppedAt) : ''}. Adjust the strap, then tap “Check again”.`;
+    default: return `⚠ Not checked at ${t}: ${chk.note}. Tap “Check again”.`;
+  }
+}
+
+function updateSlot(id) {
+  const card = document.querySelector(`[data-slot="${id}"]`);
+  if (!card) return;
+  const slot = S(id), c = C(id), now = Date.now(), ser = curSeries(id), open = !!(ser && !ser.closedMs);
+  const f = name => card.querySelector(`[data-f="${name}"]`);
+
+  const conn = f('conn');
+  conn.textContent = c.busy ? 'Working…' : (c.connected ? '● Connected' : '○ Not connected');
+  conn.className = 'conn' + (c.connected ? ' on' : '');
+
+  const meta = [];
+  meta.push(slot.sensorName ? `Sensor <b>${esc(sensorCode(slot.sensorName))}</b>` : 'No sensor assigned yet');
+  if (c.connected && c.battery != null) meta.push(`battery ${c.battery}%`);
+  if (c.connected && c.fw) meta.push(`firmware ${esc(c.fw)}`);
+  if (!c.connected && slot.sensorName && !slot.active && !ser && !c.busy) meta.push(`<button class="link" data-action="unassign">use another sensor</button>`);
+  setHTML(f('meta'), meta.join(' · '));
+
+  const hrEl = f('hr');
+  if (c.connected && c.hr != null && now - c.hrAt < 5000) {
+    setHTML(hrEl, `Live heart rate <b>${c.hr} bpm</b>` + (c.contact === true ? ' · skin contact ✓' : (c.contact === false ? ' · <b style="color:var(--err)">no skin contact</b>' : '')));
+  } else if (c.connected) setHTML(hrEl, 'Live heart rate: waiting… (strap worn and electrodes wet?)');
+  else setHTML(hrEl, '');
+
+  const input = f('pid');
+  const lockPid = open || !!(slot.active && slot.active.stopMs == null) || (c.connected && c.recOn);
+  if (document.activeElement !== input) input.value = (open ? ser.pid : (lockPid && slot.active ? slot.active.pid : (slot.pid || '')));
+  input.disabled = lockPid || c.busy;
+
+  // status
+  const st = f('status');
+  let cls = '', html = '', level = '';
+  const lastChk = open ? (ser.checks || [])[ser.checks.length - 1] : null;
+  if (c.busy) { html = esc(c.busyText); }
+  else if (open) {
+    level = checkLevel(lastChk);
+    cls = level;
+    const t0 = ser.partStarts.length ? ser.partStarts[0].startMs : ser.createdMs;
+    html = `● RECORDING${slot.active && slot.active.part > 1 ? ' · part ' + slot.active.part : ''} · since ${fmtClock(t0)}<small>${esc(checkText(lastChk))}</small>`;
+  } else if (c.connected && c.recOn) {
+    const t = slot.active && activeMatches(slot, c.recId) ? slot.active.startMs : parseIdStamp(c.recId);
+    cls = 'good';
+    html = `● RECORDING${t ? ' since ' + fmtClock(t) : ''}<small>${t ? 'elapsed ' + fmtDur((now - t) / 1000) + ' · ' : ''}ID ${esc(c.recId)}</small>`;
+  } else if (c.connected && c.entries && c.entries.length) {
+    const e = c.entries[0], sess = findSession(e.id, slot.sensorName);
+    cls = 'mem';
+    html = `Sensor memory holds recording ${esc(e.id)}<small>${sess ? 'saved on this iPad ✓' : 'not downloaded yet'}${c.entries.length > 1 ? ' · ' + c.entries.length + ' recordings' : ''}</small>`;
+  } else if (c.connected && c.entries) { cls = 'ready'; html = 'Ready · sensor memory empty'; }
+  else if (c.connected) { html = 'Connected'; }
+  else if (ser && ser.closedMs) {
+    cls = 'mem';
+    html = `Stopped at ${fmtClock(ser.stopRefMs || ser.closedMs)}<small>saved on this iPad ✓ · ${isSaved(ser) ? 'files saved ✓' : 'files not saved yet'} · sensor memory not cleared yet</small>`;
+  } else if (slot.active && slot.active.stopMs == null) {
+    cls = 'good';
+    html = `● RECORDING since ${fmtClock(slot.active.startMs)}<small>participant ${esc(slot.active.pid)} · connect to stop</small>`;
+  } else html = 'Not connected';
+  st.className = 'status' + (cls ? ' ' + cls : '');
+  setHTML(st, html);
+  card.classList.toggle('st-good', level === 'good' || (!open && cls === 'good'));
+  card.classList.toggle('st-warn', level === 'warn');
+  card.classList.toggle('st-bad', level === 'bad');
+
+  // actions
+  const b = [], dis = c.busy;
+  if (open) {
+    const nxt = nextEvent(ser);
+    const retryStop = liveEvents(ser).some(e => e.label === 'Stop recording');
+    const evBtn = btn('event', retryStop ? 'Stop recording (retry)' : esc(nxt), nxt === 'Stop recording' ? 'stop' : 'primary', false, ` data-label="${esc(nxt)}"`);
+    const chkBtn = btn('check', 'Check again', level === 'good' ? '' : (level === 'bad' ? 'stop' : 'warnbtn'), dis);
+    if (level === 'good') b.push(evBtn, chkBtn); else b.push(chkBtn, evBtn);
+    b.push(btn('other-event', 'Other event…', 'small', false));
+    if (liveEvents(ser).length > 1) b.push(btn('undo-event', 'Undo last event', 'small', dis));
+    if (c.connected && !dis) b.push(btn('disconnect', 'Disconnect', 'small', dis));
+  } else if (!c.connected) {
+    b.push(btn('connect', 'Connect', 'primary', dis));
+    if (ser && ser.closedMs) b.push(btn('save-slot', 'Save files', '', dis));
+    else if (slot.active && findSession(slot.active.exerciseId, slot.sensorName)) b.push(btn('save-slot', 'Save files', '', dis));
+  } else if (c.recOn) {
+    b.push(btn('stop', 'Stop &amp; download', 'stop', dis));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else if (c.entries && c.entries.length) {
+    const downloaded = c.entries.every(e => findSession(e.id, slot.sensorName));
+    if (downloaded) { b.push(btn('save-slot', 'Save files', 'primary', dis)); b.push(btn('download', 'Download again', '', dis)); }
+    else b.push(btn('download', 'Download', 'primary', dis));
+    b.push(btn('clear', 'Clear sensor memory', 'danger', dis));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else if (c.entries) {
+    b.push(btn('start', 'Start recording', 'primary', dis || !sanitizePid(input.value)));
+    b.push(btn('disconnect', 'Disconnect', '', dis));
+  } else b.push(btn('disconnect', 'Disconnect', '', dis));
+  setHTML(f('actions'), b.join(''));
+
+  // events line
+  const evEl = f('events');
+  if (ser) {
+    const ev = liveEvents(ser);
+    evEl.hidden = !ev.length;
+    setHTML(evEl, `Events: ${ev.slice(-4).map(e => `${esc(e.label.replace(/^Start /, ''))} <b>${fmtClock(e.ms)}</b>`).join(' · ')}${ev.length > 4 ? ` <span>(${ev.length} total)</span>` : ''}`);
+  } else evEl.hidden = true;
+
+  const m = f('msg');
+  if (c.msg) { m.hidden = false; m.className = 'msg ' + c.msg.type; m.textContent = c.msg.text; } else m.hidden = true;
+
+  const sumEl = f('summary');
+  let A = null;
+  if (ser) { try { A = analyseSeries(ser); } catch (e) { A = null; } }
+  if (A) {
+    sumEl.hidden = false;
+    setHTML(sumEl, `On this iPad: <b>${esc(ser.pid)}</b> · ${A.parts.length} part${A.parts.length > 1 ? 's' : ''} · recorded ${fmtDur(A.recordedS)}` +
+      (A.missingS > 0 ? ` · <b style="color:var(--err)">missing ${fmtDur(A.missingS)}</b>` : ' · nothing missing') +
+      ` · flagged beats ${A.artPct.toFixed(1)} %`);
+  } else sumEl.hidden = true;
+}
+
+function renderSessions() {
+  const list = allSeries();
+  const box = $('#sessions');
+  $('#saveAllBtn').disabled = !list.some(s => !isSaved(s));
+  if (!list.length) { box.innerHTML = '<div class="meta">No recordings saved on this iPad yet.</div>'; return; }
+  const rows = list.map(s => {
+    let A = null; try { A = analyseSeries(s); } catch (e) { A = null; }
+    const k = esc(s.key);
+    const inProgress = !s.virtual && !s.closedMs;
+    return `<tr>
+      <td><b>${esc(s.pid)}</b></td><td>${esc(s.slot)}</td>
+      <td>${A ? fmtDate(A.t0) + ' ' + fmtClock(A.t0) : '?'}</td>
+      <td>${A ? A.parts.length : '?'}${inProgress ? ' (in progress)' : ''}</td>
+      <td>${A ? fmtDur(A.recordedS) : '?'}</td>
+      <td>${A ? (A.missingS > 0 ? `<span class="qc-check">${fmtDur(A.missingS)}</span>` : '<span class="qc-ok">none</span>') : '?'}</td>
+      <td>${A ? A.artPct.toFixed(1) + ' %' : '<span class="qc-check">file error</span>'}</td>
+      <td>${isSaved(s) ? 'saved ✓' : '<b>not yet</b>'}</td>
+      <td><div class="actions">${btn('save-one', 'Save', '', false, ` data-key="${k}"`)}${btn('delete-one', 'Delete', 'danger', inProgress, ` data-key="${k}"`)}</div></td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `<table><thead><tr><th>Participant</th><th>H10</th><th>Start</th><th>Parts</th><th>Recorded</th><th>Missing</th><th>Flagged</th><th>Files</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ---------------------------------------------------------------- actions */
+async function actConnect(id, chooser) {
+  const c = C(id);
+  setMsg(id, null);
+  setBusy(id, 'Connecting…');
+  try {
+    await IMPL.ensureConnected(id, chooser);
+    setBusy(id, 'Reading sensor status…');
+    await refresh(id);
+    if (seriesOpen(id)) setMsg(id, 'info', 'Connected. Use the event buttons; “Check again” checks the sensor.');
+    else if (c.recOn) setMsg(id, 'info', 'The sensor is recording. Tap “Stop & download” at the end of the session.');
+    else if (c.entries && c.entries.length) setMsg(id, 'warn', 'The sensor memory still holds a recording. Download it, save the files, then clear the memory.');
+    else setMsg(id, 'ok', 'Ready. Check the live heart rate, type the participant ID and tap “Start recording”.');
+  } catch (e) {
+    log(id, 'connect failed:', errText(e));
+    setMsg(id, 'err', errText(e));
+  } finally { setBusy(id, null); renderSessions(); }
 }
 
 async function refresh(id) {
@@ -990,14 +1261,37 @@ async function refresh(id) {
         startSource: 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)', stopMs: null, fw: c.fw };
       saveState();
       log(id, 'adopted recording started elsewhere:', st.id);
-    } else {
-      log(id, 'WARNING sensor recording id', st.id, 'differs from local', slot.active.exerciseId);
-    }
-  }
-  if (!st.on && slot.active && slot.active.stopMs == null && !(c.entries || []).some(e => activeMatches(slot, e.id))) {
-    log(id, 'local record says recording but sensor is idle and has no matching file');
+    } else log(id, 'WARNING sensor recording id', st.id, 'differs from local', slot.active.exerciseId);
   }
   updateSlot(id);
+}
+
+async function startPart(id, pid, ser) {
+  const c = C(id), slot = S(id), prev = slot.active;
+  const st = await H10.status(c.psftp);
+  if (st.on) throw new Error(`The sensor is already recording (${st.id}).`);
+  c.entries = await H10.list(c.psftp);
+  if (c.entries.length) throw new Error('The sensor memory still holds a recording. Download and clear it first.');
+  await H10.setTime(c.psftp);
+  const t0 = Date.now();
+  const exerciseId = `${pid}_${idStamp(t0)}`;
+  await H10.start(c.psftp, exerciseId);
+  const t1 = Date.now();
+  const part = (ser.partCount || 0) + 1;
+  slot.pid = pid;
+  slot.active = { exerciseId, sensorId: exerciseId, pid, sensorName: slot.sensorName, startMs: Math.round((t0 + t1) / 2), startT0: t0, startT1: t1,
+    startSource: 'iPad clock when the start command was acknowledged (midpoint of command round trip)', stopMs: null, fw: c.fw, part, seriesKey: ser.key };
+  saveState();
+  let st2 = await H10.status(c.psftp);
+  if (!st2.on) { await sleep(1000); st2 = await H10.status(c.psftp); }
+  if (!st2.on) { slot.active = prev; saveState(); throw new Error('The sensor did not confirm that it is recording.'); }
+  if (st2.id && st2.id !== exerciseId) { slot.active.sensorId = st2.id; log(id, 'sensor stored id as', st2.id); }
+  c.recOn = true; c.recId = st2.id || exerciseId; c.entries = [];
+  ser.partCount = part;
+  ser.partStarts.push({ part, exerciseId, startMs: slot.active.startMs });
+  saveState();
+  log(id, 'recording part', part, 'started', exerciseId, 'at', fmtDateTime(slot.active.startMs, true));
+  return slot.active;
 }
 
 async function actStart(id) {
@@ -1005,85 +1299,66 @@ async function actStart(id) {
   const input = document.querySelector(`[data-slot="${id}"] [data-f="pid"]`);
   const pid = sanitizePid(input.value);
   if (!pid) { setMsg(id, 'err', 'Type the participant ID first.'); return; }
-  if (Object.entries(STATE.slots).some(([o, s]) => o !== id && s.active && s.active.stopMs == null && s.active.pid === pid)) {
+  if (seriesOpen(id)) { setMsg(id, 'err', 'This card already has a running session.'); return; }
+  if (SLOT_IDS.some(o => o !== id && seriesOpen(o) && curSeries(o).pid === pid)) {
     if (!await ask('Participant ID already recording', `${pid} is already being recorded on another sensor. Start anyway?`, 'Start anyway')) return;
   }
+  if (c.contact === false && !await ask('No skin contact', 'The sensor reports no skin contact. Wet the electrodes and adjust the strap first. Start anyway?', 'Start anyway')) return;
   if (!await ask('Start recording?', `Participant ${pid} on ${id} (sensor ${sensorCode(slot.sensorName)}).`, 'Start recording')) return;
   setMsg(id, null);
   setBusy(id, 'Starting recording…');
+  let ser = null;
   try {
-    const st = await H10.status(c.psftp);
-    if (st.on) throw new Error(`The sensor is already recording (${st.id}).`);
-    c.entries = await H10.list(c.psftp);
-    if (c.entries.length) throw new Error('The sensor memory still holds a previous recording. Download and clear it first.');
-    await H10.setTime(c.psftp);
-    const t0 = Date.now();
-    const exerciseId = `${pid}_${idStamp(t0)}`;
-    await H10.start(c.psftp, exerciseId);
-    const t1 = Date.now();
-    slot.pid = pid;
-    slot.active = { exerciseId, sensorId: exerciseId, pid, sensorName: slot.sensorName, startMs: Math.round((t0 + t1) / 2), startT0: t0, startT1: t1,
-      startSource: 'iPad clock when the start command was acknowledged (midpoint of command round trip)', stopMs: null, fw: c.fw };
+    ser = newSeries(id, pid);
+    slot.seriesKey = ser.key;
     saveState();
-    let st2 = await H10.status(c.psftp);
-    if (!st2.on) { await sleep(1000); st2 = await H10.status(c.psftp); }
-    if (!st2.on) { slot.active = null; saveState(); throw new Error('The sensor did not confirm that it is recording. Try again.'); }
-    if (st2.id && st2.id !== exerciseId) { slot.active.sensorId = st2.id; saveState(); log(id, 'sensor stored id as', st2.id); }
-    c.recOn = true; c.recId = st2.id || exerciseId;
-    log(id, 'recording started', exerciseId, 'at', fmtDateTime(slot.active.startMs, true));
-    setMsg(id, 'ok', `Recording started at ${fmtClock(slot.active.startMs)}. The sensor records on its own; the iPad disconnects now.`);
+    const part = await startPart(id, pid, ser);
+    ser.events.push({ label: 'Start recording', ms: part.startMs });
+    ser.checks.push({ ms: Date.now(), reason: 'Start recording', result: c.contact === false ? 'adjust' : 'ok', hr: c.hr,
+      note: c.contact === false ? 'no skin contact at start' : 'recording started', reason2: 'no skin contact' });
+    saveState();
+    setMsg(id, 'ok', `Recording started at ${fmtClock(part.startMs)}. Tap the event buttons at each change of phase.`);
     setBusy(id, null);
     await sleep(1500);
-    if (c.device && c.device.gatt.connected) c.device.gatt.disconnect();
+    IMPL.disconnectLink(id);
   } catch (e) {
+    if (ser && !ser.partCount) { delete STATE.series[ser.key]; slot.seriesKey = null; saveState(); }
     setMsg(id, 'err', 'Could not start: ' + errText(e));
-    try { await refresh(id); } catch (_) { /* ignore */ }
-  } finally { setBusy(id, null); }
-}
-
-async function actStop(id) {
-  const c = C(id), slot = S(id);
-  const who = slot.active && activeMatches(slot, c.recId) ? slot.active.pid : pidFromId(c.recId);
-  if (!await ask('Stop recording?', `Participant ${who} on ${id}. The data will be downloaded right away.`, 'Stop & download', true)) return;
-  setMsg(id, null);
-  setBusy(id, 'Stopping…');
-  try {
-    const recId = c.recId;
-    const t0 = Date.now();
-    await H10.stop(c.psftp);
-    const t1 = Date.now();
-    const stopMs = Math.round((t0 + t1) / 2);
-    if (!slot.active || !activeMatches(slot, recId)) {
-      slot.active = { exerciseId: recId, sensorId: recId, pid: pidFromId(recId), sensorName: slot.sensorName, startMs: parseIdStamp(recId),
-        startSource: 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)', fw: c.fw };
-    }
-    slot.active.stopMs = stopMs;
-    saveState();
-    log(id, 'recording stopped at', fmtDateTime(stopMs, true));
-    const st = await H10.status(c.psftp);
-    c.recOn = st.on; c.recId = st.id;
-    if (st.on) throw new Error('The sensor still reports that it is recording.');
-    await sleep(800);
-    await downloadAll(id);
-  } catch (e) {
-    setMsg(id, 'err', 'Problem: ' + errText(e));
     try { await refresh(id); } catch (_) { /* ignore */ }
   } finally { setBusy(id, null); renderSessions(); }
 }
 
-async function actDownload(id) {
-  setMsg(id, null);
-  setBusy(id, 'Downloading…');
-  try { await downloadAll(id); }
-  catch (e) { setMsg(id, 'err', 'Download failed: ' + errText(e) + ' Tap “Download” to try again.'); }
-  finally { setBusy(id, null); renderSessions(); }
+function addEvent(id, label, ms, extra) {
+  const ser = curSeries(id);
+  if (!ser) return;
+  ser.events.push(Object.assign({ label, ms }, extra || {}));
+  saveState();
+  log(id, 'event', label, fmtDateTime(ms, true));
+  updateSlot(id);
 }
 
-async function downloadAll(id) {
-  const c = C(id), slot = S(id);
-  setBusy(id, 'Reading sensor memory…');
+function onEventTap(id, label, ms, late) {
+  const ser = curSeries(id);
+  if (!ser || ser.closedMs) return;
+  if (label === 'Stop recording') {
+    ask('Stop recording?', `Participant ${ser.pid} on ${id}. The recording will be stopped and saved on this iPad.`, 'Stop recording', true,
+      () => {
+        const chooser = C(id).busy ? null : gestureChooser(id);
+        if (!liveEvents(ser).some(e => e.label === 'Stop recording')) addEvent(id, label, ms, late ? { late: true } : null);
+        actFinalStop(id, chooser, ms);
+      });
+    return;
+  }
+  const chooser = C(id).busy ? null : gestureChooser(id);
+  addEvent(id, label, ms, late ? { late: true } : null);
+  if (C(id).busy) { setMsg(id, 'info', `${label} logged at ${fmtClock(ms)}. A check is already running.`); return; }
+  runCheck(id, chooser, label);
+}
+
+async function downloadEntries(id, opts) {
+  const c = C(id), slot = S(id), ser = curSeries(id);
   c.entries = await H10.list(c.psftp);
-  if (!c.entries.length) throw new Error('No recording found in the sensor memory.');
+  const out = [];
   let wake = null;
   try { if (navigator.wakeLock) wake = await navigator.wakeLock.request('screen'); } catch (e) { /* optional */ }
   try {
@@ -1103,45 +1378,177 @@ async function downloadAll(id) {
       }
       if (lastErr) throw lastErr;
       Polar.parseSamples(bytes); // throws if the file is not readable
-      const a = slot.active && (activeMatches(slot, entry.id) || (c.entries.length === 1 && slot.active.stopMs != null && !findSession(slot.active.exerciseId, slot.sensorName))) ? slot.active : null;
-      if (a && !activeMatches(slot, entry.id)) log(id, 'matched file', entry.id, 'to local record', a.exerciseId);
+      const a = slot.active && activeMatches(slot, entry.id) ? slot.active : null;
+      const ps = ser ? ser.partStarts.find(p => p.exerciseId === entry.id) : null;
+      const inSeries = !!(ser && (ps || (a && a.seriesKey === ser.key)));
       const sess = {
         key: `${entry.id}|${sensorCode(slot.sensorName)}`,
-        exerciseId: entry.id, pid: a ? a.pid : pidFromId(entry.id), slot: id, sensorName: slot.sensorName, fw: c.fw || (a && a.fw) || '',
-        startMs: a ? a.startMs : parseIdStamp(entry.id),
-        startSource: a ? a.startSource : 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)',
+        exerciseId: entry.id, pid: a ? a.pid : (inSeries ? ser.pid : pidFromId(entry.id)), slot: id, sensorName: slot.sensorName, fw: c.fw || (a && a.fw) || '',
+        startMs: a ? a.startMs : (ps ? ps.startMs : parseIdStamp(entry.id)),
+        startSource: a ? a.startSource : (ps ? 'iPad clock when the start command was acknowledged' : 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)'),
         startT0: a && a.startT0 != null ? a.startT0 : null, startT1: a && a.startT1 != null ? a.startT1 : null,
         stopMs: a && a.stopMs != null ? a.stopMs : null,
         downloadedMs: Date.now(), fileSize: bytes.length, sensorCreated: entry.created, sensorModified: entry.modified,
         raw: b64encode(bytes), sentMs: null, clearedMs: null, appVersion: APP_VERSION,
+        seriesKey: inSeries ? ser.key : null, part: a && a.part ? a.part : (ps ? ps.part : null),
+        endedBySensor: !!(opts && opts.endedBySensor) && !(a && a.stopMs != null),
       };
-      const old = STATE.sessions[sess.key];
-      if (old && old.sentMs && old.raw === sess.raw) sess.sentMs = old.sentMs;
       ANALYSIS.delete(sess.key);
       STATE.sessions[sess.key] = sess;
+      if (inSeries) ser.savedMs = null;
       c.lastKey = sess.key;
       const an = analyse(sess);
-      log(id, 'downloaded', entry.id, bytes.length + ' bytes', an.rows.length + ' samples', 'offline', an.gaps.length, 'qc', an.qc, an.diffS);
-      if (!saveState()) setMsg(id, 'warn', 'Downloaded, but no copy could be saved on this iPad (storage full). Email the data now.');
+      log(id, 'downloaded', entry.id, bytes.length + ' bytes', an.rows.length + ' beats');
+      if (!saveState()) throw new Error('The iPad storage is full: the data could not be kept on the iPad. Save and delete older recordings in the list below, then try again. Nothing was removed from the sensor.');
+      out.push(sess);
     }
   } finally { if (wake) wake.release().catch(() => {}); }
-  const sess = STATE.sessions[c.lastKey];
-  const a = sess ? analyse(sess) : null;
-  if (!c.msg || c.msg.type !== 'warn') {
-    setMsg(id, a && a.qc === 'check' ? 'warn' : 'ok',
-      `Downloaded ✓ ${a ? (a.mode === 'hr' ? a.rows.length + ' HR samples' : a.rows.length + ' beats') : ''}. Now tap “Email data”, then “Clear sensor memory”.` +
-      (a && a.qc === 'check' ? ` Note: timing check shows ${a.diffS.toFixed(1)} s unexplained (see info file).` : ''));
+  return out;
+}
+
+async function clearEntries(id) {
+  const c = C(id), slot = S(id);
+  const entries = await H10.list(c.psftp);
+  for (const e of entries) {
+    const s = findSession(e.id, slot.sensorName);
+    if (!s || !s.raw) throw new Error(`Recording ${e.id} is not saved on this iPad, so it was not removed from the sensor.`);
+  }
+  for (const e of entries) await H10.remove(c.psftp, e);
+  c.entries = await H10.list(c.psftp);
+  if (c.entries.length) throw new Error('The sensor still lists a recording.');
+  for (const e of entries) { const s = findSession(e.id, slot.sensorName); if (s) s.clearedMs = Date.now(); }
+  saveState();
+}
+
+/* The check: connect, confirm the recording is running and the live signal is good.
+   If the sensor stopped by itself: save the part, and (if the signal is good) clear it and start the next part. */
+async function runCheck(id, chooser, reason) {
+  const c = C(id), slot = S(id), ser = curSeries(id);
+  if (!ser || ser.closedMs || c.busy) return;
+  const chk = { ms: Date.now(), reason: reason || 'Check again', result: 'fail', note: '' };
+  setMsg(id, null);
+  try {
+    setBusy(id, 'Checking: connecting…');
+    await IMPL.ensureConnected(id, chooser);
+    setBusy(id, 'Checking: recording status…');
+    let st = await H10.status(c.psftp);
+    if (st.on && !activeMatches(slot, st.id)) throw new Error(`the sensor is recording another ID (${st.id})`);
+    let sig = null;
+    if (st.on) {
+      setBusy(id, 'Checking: signal…');
+      sig = await IMPL.sampleSignal(id);
+      st = await H10.status(c.psftp);
+    }
+    if (st.on) {
+      chk.hr = sig.hr;
+      if (sig.good) { chk.result = 'ok'; chk.note = `recording, ${sig.hr} bpm, good contact`; }
+      else { chk.result = 'adjust'; chk.reason2 = sig.reason; chk.note = `recording, but ${sig.reason}`; }
+    } else {
+      const partNo = slot.active ? slot.active.part : null;
+      setBusy(id, 'The recording had stopped: saving it…');
+      const got = await downloadEntries(id, { endedBySensor: true });
+      const mine = got.find(s => slot.active && activeMatches(slot, s.exerciseId)) || got[got.length - 1] || null;
+      const endMs = mine ? mine.startMs + analyse(mine).endMs : null;
+      chk.stoppedAt = endMs;
+      setBusy(id, 'Checking: signal…');
+      sig = await IMPL.sampleSignal(id);
+      chk.hr = sig.hr;
+      if (!sig.good) {
+        chk.result = 'stopped';
+        chk.note = `part ${partNo || '?'} had stopped at ${endMs ? fmtClock(endMs) : '?'} (saved); not restarted: ${sig.reason}`;
+      } else {
+        setBusy(id, 'Starting a new part…');
+        await clearEntries(id);
+        const np = await startPart(id, ser.pid, ser);
+        const miss = endMs ? (np.startMs - endMs) / 1000 : null;
+        chk.result = 'restarted';
+        chk.note = `recording had stopped at ${endMs ? fmtClock(endMs) : '?'}; restarted as part ${np.part} at ${fmtClock(np.startMs)}` +
+          (miss != null ? ` (${fmtDur(miss)} missing)` : '');
+      }
+    }
+  } catch (e) {
+    chk.result = 'fail';
+    chk.note = errText(e).replace(/\.$/, '');
+    log(id, 'check failed:', chk.note);
+  } finally {
+    ser.checks.push(chk);
+    saveState();
+    log(id, 'check', chk.reason, '->', chk.result, chk.note);
+    setBusy(id, null);
+    IMPL.disconnectLink(id);
+    updateSlot(id); renderSessions();
   }
 }
 
+async function actFinalStop(id, chooser, tapMs) {
+  const c = C(id), slot = S(id), ser = curSeries(id);
+  if (c.busy) { setMsg(id, 'info', 'Wait until the current check has finished, then tap “Stop recording” again.'); return; }
+  setMsg(id, null);
+  setBusy(id, 'Connecting…');
+  try {
+    await IMPL.ensureConnected(id, chooser);
+    const st = await H10.status(c.psftp);
+    let stopMs = null;
+    if (st.on) {
+      if (!activeMatches(slot, st.id)) {
+        slot.active = { exerciseId: st.id, sensorId: st.id, pid: pidFromId(st.id), sensorName: slot.sensorName, startMs: parseIdStamp(st.id),
+          startSource: 'exercise ID stored in the sensor (1 s precision; start not logged on this iPad)', fw: c.fw };
+      }
+      setBusy(id, 'Stopping…');
+      const t0 = Date.now();
+      await H10.stop(c.psftp);
+      const t1 = Date.now();
+      stopMs = Math.round((t0 + t1) / 2);
+      slot.active.stopMs = stopMs;
+      saveState();
+      log(id, 'recording stopped at', fmtDateTime(stopMs, true));
+      const st2 = await H10.status(c.psftp);
+      c.recOn = st2.on; c.recId = st2.id;
+      if (st2.on) throw new Error('The sensor still reports that it is recording.');
+      await sleep(800);
+    }
+    const got = await downloadEntries(id, { endedBySensor: !st.on });
+    if (!got.length && !st.on) log(id, 'nothing in sensor memory at stop');
+    if (ser) {
+      ser.closedMs = Date.now(); ser.stopMs = stopMs; ser.stopRefMs = stopMs || tapMs || Date.now(); ser.savedMs = null;
+      saveState();
+    }
+    await refresh(id);
+    const A = ser ? analyseSeries(ser) : null;
+    if (!st.on) {
+      const lastEnd = A ? A.parts[A.parts.length - 1].end : null;
+      setMsg(id, 'err', `The sensor had stopped recording by itself${lastEnd ? ' at ' + fmtClock(lastEnd) : ''}` +
+        (lastEnd ? ` (${fmtDur((ser.stopRefMs - lastEnd) / 1000)} missing before Stop)` : '') + '. Everything recorded is saved. Now tap “Save files”, then “Clear sensor memory”.');
+    } else {
+      setMsg(id, A && A.missingS > 0 ? 'warn' : 'ok', `Stopped and saved on this iPad` +
+        (A ? ` · ${A.parts.length} part${A.parts.length > 1 ? 's' : ''} · recorded ${fmtDur(A.recordedS)}${A.missingS > 0 ? ' · missing ' + fmtDur(A.missingS) : ''}` : '') +
+        '. Now tap “Save files”, then “Clear sensor memory”.');
+    }
+  } catch (e) {
+    setMsg(id, 'err', 'Problem: ' + errText(e) + ' Tap “Stop recording” again.');
+    try { if (C(id).connected) await refresh(id); } catch (_) { /* ignore */ }
+  } finally { setBusy(id, null); renderSessions(); }
+}
+
+async function actDownload(id) {
+  setMsg(id, null);
+  setBusy(id, 'Downloading…');
+  try {
+    const got = await downloadEntries(id, {});
+    if (!got.length) throw new Error('No recording found in the sensor memory.');
+    setMsg(id, 'ok', 'Downloaded ✓ Now tap “Save files”, then “Clear sensor memory”.');
+  } catch (e) { setMsg(id, 'err', 'Download failed: ' + errText(e) + ' Tap “Download” to try again.'); }
+  finally { setBusy(id, null); renderSessions(); }
+}
+
 async function actClear(id) {
-  const c = C(id), slot = S(id);
+  const c = C(id), slot = S(id), ser = curSeries(id);
   const entries = c.entries || [];
   const notSaved = entries.filter(e => !findSession(e.id, slot.sensorName));
-  const notSent = entries.filter(e => { const s = findSession(e.id, slot.sensorName); return s && !s.sentMs; });
+  const filesSaved = ser ? isSaved(ser) : entries.every(e => { const s = findSession(e.id, slot.sensorName); return s && s.sentMs; });
   let text = 'This permanently deletes the recording from the sensor.';
   if (notSaved.length) text = 'WARNING: this recording has NOT been downloaded to this iPad and will be lost.\n\n' + text;
-  else if (notSent.length) text += '\n\nA copy stays on this iPad, but it has not been emailed yet.';
+  else if (!filesSaved) text += '\n\nA copy stays on this iPad, but the files have not been saved yet (“Save files”).';
   if (!await ask('Clear sensor memory?', text, 'Delete from sensor', true)) return;
   if (notSaved.length && !await ask('Are you sure?', 'The recording will be lost for good.', 'Yes, delete it', true)) return;
   setMsg(id, null);
@@ -1151,71 +1558,54 @@ async function actClear(id) {
     c.entries = await H10.list(c.psftp);
     if (c.entries.length) throw new Error('The sensor still lists a recording. Try again.');
     for (const e of entries) { const s = findSession(e.id, slot.sensorName); if (s) s.clearedMs = Date.now(); }
-    slot.active = null; slot.pid = ''; c.lastKey = null;
+    if (!seriesOpen(id)) { slot.active = null; slot.seriesKey = null; slot.pid = ''; c.lastKey = null; }
     saveState();
     const input = document.querySelector(`[data-slot="${id}"] [data-f="pid"]`);
-    if (input) input.value = '';
+    if (input && !seriesOpen(id)) input.value = '';
     setMsg(id, 'ok', 'Sensor memory cleared. Ready for the next participant.');
   } catch (e) {
     setMsg(id, 'err', 'Could not clear: ' + errText(e));
   } finally { setBusy(id, null); renderSessions(); }
 }
 
-function emailSessions(keys, statusSlot) {
-  const sessions = keys.map(k => STATE.sessions[k]).filter(Boolean);
-  if (!sessions.length) return;
-  const files = [], lines = [];
+/* ------------------------------------------------------------------ save */
+function saveSeriesKeys(keys, statusSlot) {
+  const list = keys.map(getSeries).filter(Boolean);
+  if (!list.length) return;
+  const files = [];
+  let base = '';
   try {
-    for (const s of sessions) { const b = buildFiles(s); files.push(...b.files); lines.push(summaryLine(s, b.a)); }
+    for (const ser of list) { const b = buildSeriesFiles(ser); files.push(...b.files); base = b.base; }
   } catch (e) {
     const t = 'Could not prepare the files: ' + errText(e);
-    if (statusSlot) setMsg(statusSlot, 'err', t); else showFallback(t);
+    if (statusSlot) setMsg(statusSlot, 'err', t); else showSaveBox(t, 'err');
     return;
   }
-  const first = sessions[0];
-  const subject = `H10 RR data - ${sessions.map(s => s.pid).join(', ')} - ${fmtDate(first.startMs != null ? first.startMs : first.downloadedMs)}`;
-  const body = `To: ${EMAIL_TO}\n\n${lines.join('\n')}\n`;
-  const markSent = () => {
-    for (const s of sessions) s.sentMs = Date.now();
-    saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
-  };
-  if (navigator.canShare && navigator.share && navigator.canShare({ files })) {
-    navigator.share({ files, title: subject, text: body })
-      .then(() => {
-        markSent();
-        const t = `Shared. Check that the email went to ${EMAIL_TO}.`;
-        if (statusSlot) setMsg(statusSlot, 'ok', t);
-      })
-      .catch(e => {
-        log('share failed:', errText(e));
-        if (e && e.name === 'AbortError') { if (statusSlot) setMsg(statusSlot, 'info', 'Email cancelled. Nothing was sent.'); }
-        else emailFallback(files, subject, body, markSent);
-      });
-  } else emailFallback(files, subject, body, markSent);
-}
-
-function emailFallback(files, subject, body, markSent) {
-  const box = $('#fallback');
-  const links = files.map(f => `<a href="${URL.createObjectURL(f)}" download="${esc(f.name)}">${esc(f.name)}</a>`).join('');
-  const mailto = `mailto:${EMAIL_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n(Files attached.)')}`;
-  box.hidden = false;
-  box.innerHTML = `This browser cannot attach files automatically.<br>1. Save each file: <span class="filelinks">${links}</span><br>
-    2. <a href="${mailto}">Open an email to ${esc(EMAIL_TO)}</a> and attach the saved files.<br>
-    3. <button class="link" data-action="mark-sent">I sent the email</button>`;
-  box._markSent = markSent;
+  const name = list.length === 1 ? `${base}.zip` : `H10_data_${fmtDate(Date.now())}_${list.length}_participants.zip`;
+  const file = new File([makeZip(files, Date.now())], name, { type: 'application/zip' });
+  const url = URL.createObjectURL(file);
+  try { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  catch (e) { log('auto download failed:', errText(e)); }
+  markSaved(list);
+  const box = $('#savebox');
+  box.hidden = false; box.className = 'msg ok';
+  box.innerHTML = `Saving <b>${esc(name)}</b> (${list.map(s => esc(s.pid)).join(', ')}). On the iPad it goes to Downloads / the Files app.<br>
+    If no download appeared, tap here: <span class="filelinks"><a href="${url}" download="${esc(name)}">${esc(name)}</a></span>
+    ${navigator.share ? ' · or <button class="link" data-action="share-zip">Share…</button> (Mail, Files, Dropbox…)' : ''}`;
+  box._file = file;
   box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (statusSlot) setMsg(statusSlot, 'ok', `Files saved as ${name}. Send the zip file to Matias.`);
 }
-function showFallback(text) { const box = $('#fallback'); box.hidden = false; box.textContent = text; }
+function showSaveBox(text, type) { const box = $('#savebox'); box.hidden = false; box.className = 'msg ' + (type || ''); box.textContent = text; }
 
 /* ---------------------------------------------------------------- wiring */
 function init() {
   $('#slots').innerHTML = SLOT_IDS.map(slotSkeleton).join('');
-  $('#mailto').textContent = EMAIL_TO;
   const banners = [];
   if (!navigator.bluetooth) banners.push(`<div class="banner err"><b>Bluetooth is not available in this browser.</b> On iPad, install the free app “Bluefy – Web BLE Browser” and open this page there.</div>`);
   if (!window.isSecureContext) banners.push(`<div class="banner warn">This page must be opened from an https:// address for Bluetooth to work.</div>`);
   try { localStorage.setItem('h10rr.test', '1'); localStorage.removeItem('h10rr.test'); }
-  catch (e) { banners.push(`<div class="banner warn">This browser does not allow saving data. Downloads will not be kept on the iPad; email them right away.</div>`); }
+  catch (e) { banners.push(`<div class="banner warn">This browser does not allow saving data. Recordings will not be kept on the iPad; save the files right away.</div>`); }
   $('#banners').innerHTML = banners.join('');
 
   document.addEventListener('click', ev => {
@@ -1225,28 +1615,63 @@ function init() {
     const id = card ? card.getAttribute('data-slot') : null;
     const action = b.getAttribute('data-action');
     switch (action) {
-      case 'connect': actConnect(id); break;
-      case 'disconnect': { const c = C(id); if (c.device && c.device.gatt.connected) c.device.gatt.disconnect(); break; }
+      case 'connect': actConnect(id, gestureChooser(id)); break;
+      case 'disconnect': IMPL.disconnectLink(id); break;
       case 'start': actStart(id); break;
-      case 'stop': actStop(id); break;
-      case 'download': actDownload(id); break;
-      case 'clear': actClear(id); break;
-      case 'email-slot': {
-        const slot = S(id), c = C(id);
-        const keys = (c.connected && c.entries && c.entries.length ? c.entries.map(e => findSession(e.id, slot.sensorName)) : [slot.active ? findSession(slot.active.exerciseId, slot.sensorName) : null])
-          .filter(Boolean).map(s => s.key);
-        if (!keys.length && c.lastKey) keys.push(c.lastKey);
-        emailSessions(keys, id);
+      case 'event': onEventTap(id, b.getAttribute('data-label'), Date.now(), false); break;
+      case 'check': runCheck(id, C(id).busy ? null : gestureChooser(id), 'Check again'); break;
+      case 'other-event': {
+        const ser = curSeries(id);
+        if (!ser) break;
+        choose('Log another event', 'The time is taken when you tap the event.', PROTOCOL.slice(1), (label, ms) => onEventTap(id, label, ms, true));
         break;
       }
-      case 'email-one': emailSessions([b.getAttribute('data-key')], null); break;
-      case 'email-unsent': emailSessions(Object.values(STATE.sessions).filter(s => !s.sentMs).map(s => s.key), null); break;
-      case 'delete-one': {
-        const key = b.getAttribute('data-key'), s = STATE.sessions[key];
-        if (!s) break;
-        ask('Delete from this iPad?', `${s.pid} (${s.slot})${s.sentMs ? '' : '\n\nThis recording has NOT been emailed yet.'}`, 'Delete', true).then(ok => {
+      case 'undo-event': {
+        const ser = curSeries(id);
+        const ev2 = ser ? liveEvents(ser) : [];
+        const last = ev2[ev2.length - 1];
+        if (!last || last.label === 'Start recording') break;
+        ask('Undo last event?', `${last.label} at ${fmtClock(last.ms)}`, 'Undo').then(ok => {
           if (!ok) return;
-          delete STATE.sessions[key]; ANALYSIS.delete(key); saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
+          last.undone = true; last.undoneMs = Date.now(); saveState(); log(id, 'event undone', last.label); updateSlot(id);
+        });
+        break;
+      }
+      case 'stop': {
+        const ms = Date.now();
+        if (seriesOpen(id)) onEventTap(id, 'Stop recording', ms, false);
+        else ask('Stop recording?', 'The data will be downloaded right away.', 'Stop & download', true).then(ok => { if (ok) actFinalStop(id, null, ms); });
+        break;
+      }
+      case 'download': actDownload(id); break;
+      case 'clear': actClear(id); break;
+      case 'save-slot': {
+        const slot = S(id), ser = curSeries(id);
+        let key = ser ? ser.key : null;
+        if (!key && slot.active) { const s = findSession(slot.active.exerciseId, slot.sensorName); if (s) key = s.seriesKey && STATE.series[s.seriesKey] ? s.seriesKey : 'v:' + s.key; }
+        if (!key && C(id).lastKey) { const s = STATE.sessions[C(id).lastKey]; if (s) key = s.seriesKey && STATE.series[s.seriesKey] ? s.seriesKey : 'v:' + s.key; }
+        if (key) saveSeriesKeys([key], id); else setMsg(id, 'err', 'Nothing to save on this card.');
+        break;
+      }
+      case 'save-one': saveSeriesKeys([b.getAttribute('data-key')], null); break;
+      case 'save-unsaved': saveSeriesKeys(allSeries().filter(s => !isSaved(s)).map(s => s.key), null); break;
+      case 'share-zip': {
+        const f = $('#savebox')._file;
+        if (f && navigator.share && (!navigator.canShare || navigator.canShare({ files: [f] }))) navigator.share({ files: [f], title: f.name }).catch(e => log('share failed:', errText(e)));
+        else showSaveBox('Sharing files is not possible in this browser. Use the download link.', 'warn');
+        break;
+      }
+      case 'delete-one': {
+        const key = b.getAttribute('data-key'), ser = getSeries(key);
+        if (!ser) break;
+        ask('Delete from this iPad?', `${ser.pid} (${ser.slot})${isSaved(ser) ? '' : '\n\nThe files of this recording have NOT been saved yet.'}`, 'Delete', true).then(ok => {
+          if (!ok) return;
+          for (const p of seriesParts(ser)) { delete STATE.sessions[p.key]; ANALYSIS.delete(p.key); }
+          if (!ser.virtual) {
+            delete STATE.series[ser.key]; SER_ANALYSIS.delete(ser.key);
+            for (const sid of SLOT_IDS) if (S(sid).seriesKey === ser.key) S(sid).seriesKey = null;
+          }
+          saveState(); renderSessions(); SLOT_IDS.forEach(updateSlot);
         });
         break;
       }
@@ -1256,15 +1681,13 @@ function init() {
           S(id).sensorName = null; C(id).device = null; saveState(); updateSlot(id);
         });
         break;
-      case 'copy-address': copyText(EMAIL_TO); break;
       case 'copy-log': copyText(LOG.join('\n')); break;
-      case 'email-log': {
+      case 'share-log': {
         const text = LOG.slice(-300).join('\n');
         if (navigator.share) navigator.share({ title: 'H10 recorder log', text }).catch(() => {});
-        else location.href = `mailto:${EMAIL_TO}?subject=${encodeURIComponent('H10 recorder log')}&body=${encodeURIComponent(text.slice(-6000))}`;
+        else copyText(text);
         break;
       }
-      case 'mark-sent': { const box = $('#fallback'); if (box._markSent) box._markSent(); box.hidden = true; break; }
     }
   });
   document.addEventListener('input', ev => {
@@ -1292,7 +1715,7 @@ function init() {
     tick();
     for (const id of SLOT_IDS) {
       const c = C(id), slot = S(id);
-      if ((c.connected && (c.recOn || c.hrAt)) || (slot.active && slot.active.stopMs == null)) {
+      if (c.connected || c.busy || seriesOpen(id) || (slot.active && slot.active.stopMs == null)) {
         if (document.activeElement && document.activeElement.closest && document.activeElement.closest(`[data-slot="${id}"]`)) continue;
         updateSlot(id);
       }
@@ -1311,7 +1734,7 @@ function copyText(text) {
 
 window.addEventListener('error', ev => log('ERROR', ev.message, ev.filename + ':' + ev.lineno));
 window.addEventListener('unhandledrejection', ev => log('ERROR (promise)', errText(ev.reason)));
-window.H10RR = { PB, Polar, buildFrames, queryMessage, requestMessage, analyse, buildCsv, buildInfo, STATE: () => STATE };
+window.H10RR = { PB, Polar, H10, IMPL, C, S, analyse, analyseSeries, buildSeriesFiles, makeZip, STATE: () => STATE, runCheck, onEventTap, addEvent, newSeries, startPart, updateSlot, renderSessions };
 init();
 })();
 </script>
