@@ -102,6 +102,13 @@
   .events b { color: var(--text); font-weight: 600; }
   .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
   .choices button { min-height: 42px; }
+  .timer { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 6px 12px; border-radius: 9px; background: #f4f5f8; }
+  .timer .ph { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+  .timer .tm { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+  .timer .tg { font-size: 14px; color: var(--muted); }
+  .timer[hidden] { display: none; }
+  .timer.done { background: var(--ok-bg); }
+  .timer.done .tg { color: var(--ok); font-weight: 700; }
   button.startbtn { background: #0f3f86; border-color: #0f3f86; }
 </style>
 </head>
@@ -109,7 +116,7 @@
 <header>
   <div>
     <h1>H10 RR Recorder</h1>
-    <div class="sub">Polar H10 internal RR recordings · 4 sensors · v1.3</div>
+    <div class="sub">Polar H10 internal RR recordings · 4 sensors · v1.4</div>
   </div>
   <div class="clockbox">
     <div id="clock">--:--:--</div>
@@ -149,6 +156,7 @@
       <li>When the patient is seated (in the TMS chair, or in the waiting room for a break), tap <b>Check before …</b> (e.g. <b>Check before TMS1</b>). The app checks the sensor by itself (about 10–15 s).</li>
       <li><b>Green</b>: all OK. <b>Orange</b>: poor signal or could not connect: adjust the strap (and check the iPad is within ~10 m), then tap <b>Check again</b>. <b>Red</b>: the recording had stopped: adjust the strap, then tap <b>Check again</b>; the app saves what was recorded and starts a new part by itself.</li>
       <li>Repeat <b>Check again</b> until the card is <b>green</b>.</li>
+      <li>The card shows the current phase and how long it has lasted (e.g. <b>baseline 06:44 · planned 10:00</b>); it turns green when the planned time is reached. The baseline should last at least 10 minutes.</li>
       <li>When the stimulation (or the break) starts, tap <b>Start …</b> (e.g. <b>Start TMS1</b>). This only saves the time: nothing happens with the sensor, and the patient does not need to move.</li>
       <li>Wrong button? Use <b>Undo last event</b>. Missed a start? Use <b>Other event…</b> right away.</li>
     </ol>
@@ -194,7 +202,7 @@
 'use strict';
 
 /* ---------------------------------------------------------------- settings */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const SLOT_IDS = ['H10-01', 'H10-02', 'H10-03', 'H10-04'];
 const STORE_KEY = 'h10rr.v1';
 const FRAME_SIZE = 20;           // RFC76 air packet size for writes (valid for any ATT MTU)
@@ -551,8 +559,15 @@ class PsftpClient {
 /* ------------------------------------------------------ H10 recording commands */
 const H10 = {
   async status(c) {
-    const r = await c.query(QUERY.RECORDING_STATUS, null, 'recording status');
-    return r.length ? Polar.parseRecordingStatus(r) : { on: false, id: '' };
+    for (let i = 0; ; i++) {
+      try {
+        const r = await c.query(QUERY.RECORDING_STATUS, null, 'recording status');
+        return r.length ? Polar.parseRecordingStatus(r) : { on: false, id: '' };
+      } catch (e) {
+        if (i < 2 && e && [2, 202, 208].includes(e.code)) { await sleep(1000); continue; } // sensor busy: try again
+        throw e;
+      }
+    }
   },
   start(c, id) { return c.query(QUERY.START_RECORDING, Polar.startRecordingParams(SAMPLE_TYPE_RR, 1, id), 'start recording ' + id); },
   stop(c) { return c.query(QUERY.STOP_RECORDING, null, 'stop recording'); },
@@ -647,6 +662,20 @@ function phaseOf(label) {
   return m ? m[1] : label;
 }
 const ART_LOW = 300, ART_HIGH = 2000, ART_REL = 0.25;
+/* Planned phase durations (minutes), shown on the card timer. */
+const PHASE_TARGET_MIN = { baseline: 10, TMS: 20, break: 30, break5: 10 };
+function phaseTargetMin(ph) {
+  if (PHASE_TARGET_MIN[ph] != null) return PHASE_TARGET_MIN[ph];
+  if (/^TMS/.test(ph)) return PHASE_TARGET_MIN.TMS;
+  if (/^break/.test(ph)) return PHASE_TARGET_MIN.break;
+  return null;
+}
+function currentPhase(ser) {
+  const ev = liveEvents(ser).filter(e => !isCheckLabel(e.label) && e.label !== 'Stop recording');
+  const last = ev[ev.length - 1];
+  return last ? { phase: phaseOf(last.label), since: last.ms } : null;
+}
+function fmtMmSs(sec) { sec = Math.max(0, Math.floor(sec)); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60; return (h ? h + ':' + pad(m) : pad(m)) + ':' + pad(s); }
 
 /* --------------------------------------------------------------- series */
 /* A series = one participant on one sensor for one session. It holds one or more
@@ -1074,6 +1103,7 @@ function slotSkeleton(id) {
     <div class="meta" data-f="hr"></div>
     <label class="pid">Participant ID <input type="text" data-f="pid" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="16" placeholder="e.g. P001"></label>
     <div class="status" data-f="status"></div>
+    <div class="timer" data-f="timer" hidden></div>
     <div class="actions" data-f="actions"></div>
     <div class="events" data-f="events" hidden></div>
     <div class="msg" data-f="msg" hidden></div>
@@ -1161,6 +1191,18 @@ function updateSlot(id) {
   card.classList.toggle('st-good', level === 'good' || (!open && cls === 'good'));
   card.classList.toggle('st-warn', level === 'warn');
   card.classList.toggle('st-bad', level === 'bad');
+
+  // phase timer
+  const tEl = f('timer');
+  const cur = open ? currentPhase(ser) : null;
+  if (cur) {
+    const el = (now - cur.since) / 1000, tgt = phaseTargetMin(cur.phase);
+    const done = tgt != null && el >= tgt * 60;
+    tEl.hidden = false;
+    tEl.className = 'timer' + (done ? ' done' : '');
+    setHTML(tEl, `<span class="ph">${esc(cur.phase)}</span><span class="tm">${fmtMmSs(el)}</span>` +
+      (tgt != null ? `<span class="tg">${done ? '✓ ' : ''}planned ${tgt}:00</span>` : ''));
+  } else tEl.hidden = true;
 
   // actions
   const b = [], dis = c.busy;
@@ -1368,8 +1410,10 @@ function onEventTap(id, label, ms, late) {
     setMsg(id, 'ok', `${label} logged at ${fmtClock(ms)}.`);
   };
   const lastChk = (ser.checks || [])[ser.checks.length - 1];
-  if (!C(id).busy && checkLevel(lastChk) !== 'good') {
-    ask(`${label}: the last check was not green`, `${checkText(lastChk)}\n\nLog “${label}” anyway? (The time of your first tap, ${fmtClock(ms)}, is used.)`, `Log ${label}`, false)
+  const warn = [];
+  if (!C(id).busy && checkLevel(lastChk) !== 'good') warn.push('The last check was not green: ' + checkText(lastChk));
+  if (warn.length) {
+    ask(`Log “${label}” now?`, `${warn.join('\n\n')}\n\nLog “${label}” anyway? (The time of your first tap, ${fmtClock(ms)}, is used.)`, `Log ${label}`, false)
       .then(ok => { if (ok) logStart(); });
     return;
   }
@@ -1444,14 +1488,15 @@ async function clearEntries(id) {
 
 /* The check: connect, confirm the recording is running and the live signal is good.
    If the sensor stopped by itself: save the part, and (if the signal is good) clear it and start the next part. */
-async function runCheck(id, chooser, reason) {
-  const c = C(id), slot = S(id), ser = curSeries(id);
-  if (!ser || ser.closedMs || c.busy) return;
-  const chk = { ms: Date.now(), reason: reason || 'Check again', result: 'fail', note: '' };
-  setMsg(id, null);
-  try {
-    setBusy(id, 'Checking: connecting…');
-    await IMPL.ensureConnected(id, chooser);
+function friendlyError(e) {
+  const msg = errText(e).replace(/\.$/, '');
+  if (e && [2, 202, 208].includes(e.code)) return 'the sensor was busy';
+  if (e && [108, 303, 200].includes(e.code)) return 'the Bluetooth transfer was interrupted';
+  if (/^\s*\d+\s*$/.test(msg)) return `unexpected Bluetooth error (${msg.trim()})`;
+  return msg;
+}
+async function checkCore(id, ser, chk) {
+  const c = C(id), slot = S(id);
     setBusy(id, 'Checking: recording status…');
     let st = await H10.status(c.psftp);
     if (st.on && !activeMatches(slot, st.id)) throw new Error(`the sensor is recording another ID (${st.id})`);
@@ -1515,10 +1560,35 @@ async function runCheck(id, chooser, reason) {
           (miss != null ? ` (${fmtDur(miss)} missing)` : '');
       }
     }
+}
+async function runCheck(id, chooser, reason) {
+  const c = C(id), slot = S(id), ser = curSeries(id);
+  if (!ser || ser.closedMs || c.busy) return;
+  // After Stop (tapped, or already sent from the iPad) a check must never start a new part: finish the stop instead.
+  const stopEv = liveEvents(ser).find(e => e.label === 'Stop recording');
+  if (stopEv || (slot.active && slot.active.stopMs != null)) { actFinalStop(id, chooser, stopEv ? stopEv.ms : slot.active.stopMs); return; }
+  const chk = { ms: Date.now(), reason: reason || 'Check again', result: 'fail', note: '' };
+  setMsg(id, null);
+  let connected = false;
+  try {
+    setBusy(id, 'Checking: connecting…');
+    await IMPL.ensureConnected(id, chooser);
+    connected = true;
+    try { await checkCore(id, ser, chk); }
+    catch (e1) {
+      // One automatic retry (e.g. sensor busy, Bluetooth hiccup), then report.
+      log(id, 'check error, retrying once:', errText(e1));
+      setBusy(id, 'Checking: trying again…');
+      IMPL.disconnectLink(id);
+      await sleep(2000);
+      await IMPL.ensureConnected(id, null);
+      Object.assign(chk, { result: 'fail', note: '', retried: true });
+      await checkCore(id, ser, chk);
+    }
   } catch (e) {
     chk.result = 'fail';
-    chk.note = errText(e).replace(/\.$/, '');
-    log(id, 'check failed:', chk.note);
+    chk.note = (connected ? '' : '') + friendlyError(e);
+    log(id, 'check failed:', errText(e));
   } finally {
     ser.checks.push(chk);
     saveState();
@@ -1556,7 +1626,9 @@ async function actFinalStop(id, chooser, tapMs) {
       if (st2.on) throw new Error('The sensor still reports that it is recording.');
       await sleep(800);
     }
-    const got = await downloadEntries(id, { endedBySensor: !st.on });
+    const stoppedBefore = !st.on && slot.active && slot.active.stopMs != null ? slot.active.stopMs : null;
+    if (stoppedBefore) stopMs = stoppedBefore;
+    const got = await downloadEntries(id, { endedBySensor: !st.on && !stoppedBefore });
     if (!got.length && !st.on) log(id, 'nothing in sensor memory at stop');
     if (ser) {
       ser.closedMs = Date.now(); ser.stopMs = stopMs; ser.stopRefMs = stopMs || tapMs || Date.now(); ser.savedMs = null;
@@ -1564,7 +1636,7 @@ async function actFinalStop(id, chooser, tapMs) {
     }
     await refresh(id);
     const A = ser ? analyseSeries(ser) : null;
-    if (!st.on) {
+    if (!st.on && !stoppedBefore) {
       const lastEnd = A ? A.parts[A.parts.length - 1].end : null;
       setMsg(id, 'err', `The sensor had stopped recording by itself${lastEnd ? ' at ' + fmtClock(lastEnd) : ''}` +
         (lastEnd ? ` (${fmtDur((ser.stopRefMs - lastEnd) / 1000)} missing before Stop)` : '') + '. Everything recorded is saved. Now tap “Save files”, then “Clear sensor memory”.');
